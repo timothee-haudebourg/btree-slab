@@ -20,3 +20,15 @@ impl<K: Ord + PartialEq, V> PartialOrd<K> for Item<K, V> {
 		Some(self.key.cmp(key))
 	}
 }
+
+impl<K: PartialEq, V> PartialEq for Item<K, V> {
+	fn eq(&self, other: &Item<K, V>) -> bool {
+		self.key.eq(&other.key)
+	}
+}
+
+impl<K: Ord + PartialEq, V> PartialOrd for Item<K, V> {
+	fn partial_cmp(&self, other: &Item<K, V>) -> Option<Ordering> {
+		Some(self.key.cmp(&other.key))
+	}
+}

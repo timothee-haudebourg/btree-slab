@@ -1,12 +1,91 @@
 #![feature(min_const_generics)]
 #![feature(move_ref_pattern)]
+#![feature(is_sorted)]
 
 mod utils;
 mod node;
 mod item;
 
-use node::*;
-use item::*;
+pub use node::*;
+pub use item::*;
+
+/// Extension methods.
+///
+/// This trait can be imported to access the internal methods of the B-Tree.
+/// These methods are not intended to be directly called by users, but can be used to
+/// extends the data structure with new functionalities.
+pub trait BTreeExt<K, V, const M: usize> {
+	/// Get the node associated to the given `id`.
+	///
+	/// Panics if `id` is out of bounds.
+	fn node(&self, id: usize) -> &Node<K, V, M>;
+
+	/// Get the node associated to the given `id` mutabily.
+	///
+	/// Panics if `id` is out of bounds.
+	fn node_mut(&mut self, id: usize) -> &mut Node<K, V, M>;
+
+	fn get_in(&self, key: &K, id: usize) -> Option<&V> where K: Ord;
+
+	fn get_mut_in(&mut self, key: &K, id: usize) -> Option<&mut V> where K: Ord;
+
+	/// Insert a key-value pair in an internal or leaf node.
+	///
+	/// It is assumed that there is still one free space in the node.
+	fn insert_into(&mut self, key: K, value: V, node_id: usize) -> Option<V> where K: Ord;
+
+	/// Rebalance a child node, if necessary.
+	///
+	/// Return the balance of the node after rebalancing the child.
+	fn rebalance_child(&mut self, node_id: usize, child_index: usize, child_balance: Balance) -> Balance;
+
+	/// Remove the item matching the given key from the given node `node_id`.
+	fn remove_from(&mut self, key: &K, node_id: usize) -> Option<(V, Balance)> where K: Ord;
+
+	/// Update a value in the given node `node_id`.
+	fn update_in<T, F>(&mut self, key: K, action: F, id: usize) -> (T, Balance) where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T);
+
+	/// Take the right-most leaf value in the given node.
+	fn remove_rightmost_leaf_of(&mut self, node_id: usize) -> (Item<K, V>, Balance);
+
+	/// Try to rotate left the node `node_id` to benefits the child number `deficient_child_index`.
+	///
+	/// Returns true if the rotation succeeded, of false if the target child has no right sibling,
+	/// or if this sibling would underflow.
+	fn try_rotate_left(&mut self, node_id: usize, deficient_child_index: usize) -> bool;
+
+	/// Try to rotate right the node `node_id` to benefits the child number `deficient_child_index`.
+	///
+	/// Returns true if the rotation succeeded, of false if the target child has no left sibling,
+	/// or if this sibling would underflow.
+	fn try_rotate_right(&mut self, node_id: usize, deficient_child_index: usize) -> bool;
+
+	/// Merge the `deficient_child_index` child of `node_id` with its left or right sibling.
+	///
+	/// It is assumed that both siblings of the child `deficient_child_index` can be used for
+	/// merging: the resulting merged node should not overflow.
+	///
+	/// Returns the balance of `node_id` after the merge (it may underflow).
+	fn merge(&mut self, node_id: usize, deficient_child_index: usize) -> Balance;
+
+	/// Allocate a free identifier for the given node.
+	fn allocate_node(&mut self, node: Node<K, V, M>) -> usize;
+
+	/// Release the given node identifier and return the node it used to identify.
+	fn release_node(&mut self, id: usize) -> Node<K, V, M>;
+
+	/// Validate the tree.
+	///
+	/// Panics if the tree is not a valid B-Tree.
+	#[cfg(debug_assertions)]
+	fn validate(&self) where K: Ord;
+
+	/// Validate the given node and returns the depth of the node.
+	///
+	/// Panics if the tree is not a valid B-Tree.
+	#[cfg(debug_assertions)]
+	fn validate_node(&self, id: usize, min: Option<&K>, max: Option<&K>) -> usize where K: Ord;
+}
 
 /// B-tree of Knuth order `M` storing keys of type `K` associated to values of type `V`.
 ///
@@ -19,17 +98,267 @@ pub struct BTree<K, V, const M: usize> {
 	root: Option<usize>,
 
 	/// First free node.
-	first_free_node: Option<usize>
+	first_free_node: Option<usize>,
+
+	len: usize
 }
 
 impl<K, V, const M: usize> BTree<K, V, M> {
 	/// Create a new empty B-tree.
-	pub fn new(&self) -> BTree<K, V, M> {
+	pub fn new() -> BTree<K, V, M> {
 		assert!(M >= 4);
 		BTree {
 			nodes: Vec::new(),
 			root: None,
-			first_free_node: None
+			first_free_node: None,
+			len: 0
+		}
+	}
+
+	#[inline]
+	pub fn is_empty(&self) -> bool {
+		self.root.is_none()
+	}
+
+	#[inline]
+	pub fn len(&self) -> usize {
+		self.len
+	}
+
+	#[inline]
+	pub fn get(&self, key: &K) -> Option<&V> where K: Ord {
+		match self.root {
+			Some(id) => self.get_in(key, id),
+			None => None
+		}
+	}
+
+	#[inline]
+	pub fn get_mut(&mut self, key: &K) -> Option<&mut V> where K: Ord {
+		match self.root {
+			Some(id) => self.get_mut_in(key, id),
+			None => None
+		}
+	}
+
+	#[inline]
+	pub fn contains(&self, key: &K) -> bool where K: Ord {
+		self.get(key).is_some()
+	}
+
+	/// Insert a key-value pair in the tree.
+	#[inline]
+	pub fn insert(&mut self, key: K, value: V) -> Option<V> where K: Ord {
+		match self.root {
+			Some(id) => {
+				let root = &mut self.nodes[id];
+				let id = match root.split() {
+					Ok((median, right_node)) => {
+						let new_root = Node::binary(id, median, self.allocate_node(right_node));
+						let id = self.allocate_node(new_root);
+						self.root = Some(id);
+						id
+					},
+					_ => id
+				};
+
+				let old_value = self.insert_into(key, value, id);
+				if old_value.is_none() {
+					self.len += 1;
+				}
+
+				old_value
+			},
+			None => {
+				let new_root = Node::leaf(Item { key, value });
+				self.root = Some(self.allocate_node(new_root));
+				self.len += 1;
+				None
+			}
+		}
+	}
+
+	// Delete an item by key.
+	#[inline]
+	pub fn remove(&mut self, key: &K) -> Option<V> where K: Ord {
+		match self.root {
+			Some(id) => match self.remove_from(key, id) {
+				Some((value, balance)) => {
+					match balance {
+						Balance::Underflow(true) => { // The root is empty.
+							self.root = self.node(id).child_id_opt(0);
+							self.release_node(id);
+						},
+						_ => ()
+					};
+
+					self.len -= 1;
+
+					Some(value)
+				},
+				None => None
+			},
+			None => None
+		}
+	}
+
+	/// General-purpose update function.
+	///
+	/// This can be used to insert, compare, replace or remove the value associated to the given
+	/// `key` in the tree.
+	/// The action to perform is specified by the `action` function.
+	/// This function is called once with:
+	///  - `Some(value)` when `value` is aready associated to `key` in the tree or
+	///  - `None` when the `key` is not associated to any value in the tree.
+	/// The `action` function must return a pair (`new_value`, `result`) where
+	/// `new_value` is the new value to be associated to `key`
+	/// (if it is `None` any previous binding is removed) and
+	/// `result` is the value returned by the entire `update` function call.
+	#[inline]
+	pub fn update<T, F>(&mut self, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
+		match self.root {
+			Some(id) => {
+				let (result, balance) = self.update_in(key, action, id);
+
+				match balance {
+					Balance::Underflow(true) => { // The root is empty.
+						self.root = self.node(id).child_id_opt(0);
+						self.release_node(id);
+					},
+					_ => ()
+				};
+
+				result
+			},
+			None => {
+				let (to_insert, result) = action(None);
+
+				if let Some(value) = to_insert {
+					let new_root = Node::leaf(Item { key, value });
+					self.root = Some(self.allocate_node(new_root));
+					self.len += 1;
+				}
+
+				result
+			}
+		}
+	}
+
+	/// Shrink the capacity of the internal vector as much as possible.
+	///
+	/// Note that because of the internal fragmentation of the internal node vector,
+	/// the capacity may still be larger than the number of nodes in the tree.
+	#[inline]
+	pub fn shrink_to_fit(&mut self) {
+		loop {
+			match self.nodes.last() {
+				Some(last) => match last.as_free_node() {
+					Ok((prev_id, next_id)) => {
+						match prev_id {
+							Some(prev_id) => match &mut self.nodes[prev_id] {
+								Node::Free(_, id) => {
+									*id = next_id
+								},
+								_ => unreachable!()
+							},
+							None => self.first_free_node = next_id
+						}
+
+						if let Some(next_id) = next_id {
+							match &mut self.nodes[next_id] {
+								Node::Free(id, _) => {
+									*id = prev_id
+								},
+								_ => unreachable!()
+							}
+						}
+					},
+					Err(_) => break
+				},
+				None => break
+			}
+		}
+
+		self.nodes.shrink_to_fit()
+	}
+
+	/// Write the tree in the DOT graph descrption language.
+	///
+	/// Requires the `dot` feature.
+	#[cfg(feature = "dot")]
+	#[inline]
+	pub fn dot_write<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+		write!(f, "digraph tree {{\n\tnode [shape=record];\n")?;
+		match self.root {
+			Some(id) => self.dot_write_node(f, id)?,
+			None => ()
+		}
+		write!(f, "}}")
+	}
+
+	/// Write the given node in the DOT graph descrption language.
+	///
+	/// Requires the `dot` feature.
+	#[cfg(feature = "dot")]
+	#[inline]
+	fn dot_write_node<W: std::io::Write>(&self, f: &mut W, id: usize) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+		let name = format!("n{}", id);
+		let node = self.node(id);
+
+		write!(f, "\t{} [label=\"", name)?;
+		node.dot_write_label(f)?;
+		write!(f, "({})\"];\n", id)?;
+
+		for child_id in node.children() {
+			self.dot_write_node(f, child_id)?;
+			let child_name = format!("n{}", child_id);
+			write!(f, "\t{} -> {}\n", name, child_name)?;
+		}
+
+		Ok(())
+	}
+}
+
+impl<K, V, const M: usize> BTreeExt<K, V, M> for BTree<K, V, M> {
+	#[inline]
+	fn node(&self, id: usize) -> &Node<K, V, M> {
+		&self.nodes[id]
+	}
+
+	#[inline]
+	fn node_mut(&mut self, id: usize) -> &mut Node<K, V, M> {
+		&mut self.nodes[id]
+	}
+
+	#[inline]
+	fn get_in(&self, key: &K, mut id: usize) -> Option<&V> where K: Ord {
+		loop {
+			match self.nodes[id].get(key) {
+				Ok(value_opt) => return value_opt,
+				Err(child_id) => {
+					id = child_id
+				}
+			}
+		}
+	}
+
+	#[inline]
+	fn get_mut_in<'a>(&'a mut self, key: &K, mut id: usize) -> Option<&'a mut V> where K: Ord {
+		// The borrow checker is unable to predict that `*self`
+		// is not borrowed more that once at a time.
+		// That's why we need this little unsafe pointer gymnastic.
+
+		let value_ptr = loop {
+			match self.nodes[id].get_mut(key) {
+				Ok(value_opt) => break value_opt.map(|value_ref| value_ref as *mut V),
+				Err(child_id) => {
+					id = child_id
+				}
+			}
+		};
+
+		unsafe {
+			value_ptr.map(|ptr| &mut *ptr)
 		}
 	}
 
@@ -37,28 +366,35 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 	///
 	/// It is assumed that there is still one free space in the node.
 	#[inline]
-	fn internal_insert(&mut self, mut key: K, mut value: V, mut id: usize) -> Option<V> where K: Ord {
+	fn insert_into(&mut self, mut key: K, mut value: V, mut id: usize) -> Option<V> where K: Ord {
 		loop {
 			// Try to insert the value in the current node.
 			// For internal nodes, this works only if the key is already there.
 			match self.nodes[id].insert(key, value) {
 				Ok(old_value) => return old_value,
-				Err((k, v, child_pos, child_id)) => {
+				Err((k, v, child_index, child_id)) => {
 					// Direct insertion failed.
 					// We need to insert the element in a subtree.
 					let child = &mut self.nodes[child_id];
-					match child.split() {
+					let child_id = match child.split() {
 						Ok((median, right_node)) => {
+							let insert_right = k > median.key;
 							let right_id = self.allocate_node(right_node);
 							match &mut self.nodes[id] {
 								Node::Internal(node) => {
-									node.insert_node(child_pos, median, right_id)
+									node.insert_node_after(child_index, median, right_id)
 								},
 								_ => unreachable!()
 							}
+
+							if insert_right {
+								right_id
+							} else {
+								child_id
+							}
 						},
-						_ => ()
-					}
+						_ => child_id
+					};
 
 					key = k;
 					value = v;
@@ -122,7 +458,92 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 		}
 	}
 
+	fn update_in<T, F>(&mut self, key: K, action: F, id: usize) -> (T, Balance) where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
+		match self.nodes[id].offset_of(&key) {
+			Ok(offset) => {
+				match self.nodes[id].force_take(offset) {
+					Ok((mut item, balance)) => { // update in leaf.
+						let (to_insert, result) = action(Some(item.value));
+						match to_insert {
+							Some(value) => {
+								item.value = value;
+								self.nodes[id].put(offset, item, None);
+								(result, Balance::Balanced)
+							},
+							None => {
+								self.len -= 1;
+								(result, balance)
+							}
+						}
+					},
+					Err((left_child_id, mut item, right_child_id)) => { // update in internal node.
+						let (to_insert, result) = action(Some(item.value));
+						match to_insert {
+							Some(value) => {
+								item.value = value;
+								self.nodes[id].put(offset, item, Some(right_child_id));
+								(result, Balance::Balanced)
+							},
+							None => {
+								let left_child_index = offset;
+								let (separator, left_child_balance) = self.remove_rightmost_leaf_of(left_child_id);
+								self.nodes[id].put(offset, separator, Some(right_child_id));
+								let balance = self.rebalance_child(id, left_child_index, left_child_balance);
+								self.len -= 1;
+								(result, balance)
+							}
+						}
+					}
+				}
+			},
+			Err(Some((child_index, child_id))) => { // update in child
+				// split the child if necessary.
+				let child = &mut self.nodes[child_id];
+				let child_id = match child.split() {
+					Ok((median, right_node)) => {
+						let insert_right = key > median.key;
+						let right_id = self.allocate_node(right_node);
+						match &mut self.nodes[id] {
+							Node::Internal(node) => {
+								node.insert_node_after(child_index, median, right_id)
+							},
+							_ => unreachable!()
+						}
+
+						if insert_right {
+							right_id
+						} else {
+							child_id
+						}
+					},
+					_ => child_id
+				};
+
+				let (result, child_balance) = self.update_in(key, action, child_id);
+				let balance = self.rebalance_child(id, child_index, child_balance);
+				(result, balance)
+			},
+			Err(None) => { // update nowhere. We are in a leaf.
+				let (to_insert, result) = action(None);
+
+				if let Some(value) = to_insert {
+					match self.nodes[id].insert(key, value) {
+						Ok(None) => (),
+						_ => unreachable!()
+					}
+				}
+
+				self.len += 1;
+
+				(result, Balance::Balanced)
+			}
+		}
+	}
+
 	/// Take the right-most leaf value in the given node.
+	///
+	/// Note that this does not change the registred length of the tree.
+	/// The returned item is expected to be reinserted in the tree.
 	#[inline]
 	fn remove_rightmost_leaf_of(&mut self, id: usize) -> (Item<K, V>, Balance) {
 		match self.nodes[id].take_rightmost_leaf() {
@@ -141,6 +562,7 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 	/// or if this sibling would underflow.
 	#[inline]
 	fn try_rotate_left(&mut self, id: usize, deficient_child_index: usize) -> bool {
+		let pivot_index = deficient_child_index;
 		let right_sibling_index = deficient_child_index + 1;
 		let (right_sibling_id, deficient_child_id) = {
 			let node = &self.nodes[id];
@@ -154,7 +576,7 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 
 		match self.nodes[right_sibling_id].pop_left() {
 			Ok((mut value, opt_child_id)) => {
-				std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(right_sibling_index));
+				std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(pivot_index));
 				self.nodes[deficient_child_id].push_right(value, opt_child_id);
 				true // rotation succeeded
 			},
@@ -170,13 +592,14 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 	fn try_rotate_right(&mut self, id: usize, deficient_child_index: usize) -> bool {
 		if deficient_child_index > 0 {
 			let left_sibling_index = deficient_child_index - 1;
+			let pivot_index = left_sibling_index;
 			let (left_sibling_id, deficient_child_id) = {
 				let node = &self.nodes[id];
 				(node.child_id(left_sibling_index), node.child_id(deficient_child_index))
 			};
 			match self.nodes[left_sibling_id].pop_right() {
 				Ok((mut value, opt_child_id)) => {
-					std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(left_sibling_index));
+					std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(pivot_index));
 					self.nodes[deficient_child_id].push_left(value, opt_child_id);
 					true // rotation succeeded
 				},
@@ -201,52 +624,6 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 		self.nodes[left_id].append(separator, right_node);
 
 		balancing
-	}
-
-	/// Insert a key-value pair in the tree.
-	#[inline]
-	pub fn insert(&mut self, key: K, value: V) -> Option<V> where K: Ord {
-		match self.root {
-			Some(id) => {
-				let root = &mut self.nodes[id];
-				match root.split() {
-					Ok((median, right_node)) => {
-						let new_root = Node::binary(id, median, self.allocate_node(right_node));
-						self.root = Some(self.allocate_node(new_root))
-					},
-					_ => ()
-				}
-
-				self.internal_insert(key, value, id)
-			},
-			None => {
-				let new_root = Node::leaf(Item { key, value });
-				self.root = Some(self.allocate_node(new_root));
-				None
-			}
-		}
-	}
-
-	// Delete an item by key.
-	#[inline]
-	pub fn remove(&mut self, key: &K) -> Option<V> where K: Ord {
-		match self.root {
-			Some(id) => match self.remove_from(key, id) {
-				Some((value, balance)) => {
-					match balance {
-						Balance::Underflow(true) => { // The root node ended-up empty.
-							self.release_node(id);
-							self.root = None
-						},
-						_ => ()
-					};
-
-					Some(value)
-				},
-				None => None
-			},
-			None => None
-		}
 	}
 
 	/// Allocate a free node.
@@ -310,41 +687,40 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 		node
 	}
 
-	/// Shrink the capacity of the internal vector as much as possible.
-	///
-	/// Note that because of the internal fragmentation of the internal node vector,
-	/// the capacity may still be larger than the number of nodes in the tree.
-	#[inline]
-	pub fn shrink_to_fit(&mut self) {
-		loop {
-			match self.nodes.last() {
-				Some(last) => match last.as_free_node() {
-					Ok((prev_id, next_id)) => {
-						match prev_id {
-							Some(prev_id) => match &mut self.nodes[prev_id] {
-								Node::Free(_, id) => {
-									*id = next_id
-								},
-								_ => unreachable!()
-							},
-							None => self.first_free_node = next_id
-						}
+	#[cfg(debug_assertions)]
+	fn validate(&self) where K: Ord {
+		match self.root {
+			Some(id) => {
+				self.validate_node(id, None, None);
+			},
+			None => ()
+		}
+	}
 
-						if let Some(next_id) = next_id {
-							match &mut self.nodes[next_id] {
-								Node::Free(id, _) => {
-									*id = prev_id
-								},
-								_ => unreachable!()
-							}
-						}
-					},
-					Err(_) => break
-				},
-				None => break
+	/// Validate the given node and returns the depth of the node.
+	#[cfg(debug_assertions)]
+	fn validate_node(&self, id: usize, min: Option<&K>, max: Option<&K>) -> usize where K: Ord {
+		let node = self.node(id);
+		node.validate(min, max);
+
+		let mut depth = None;
+		for (i, child_id) in node.children().enumerate() {
+			let (min, max) = node.separators(i);
+
+			let child_depth = self.validate_node(child_id, min, max);
+			match depth {
+				None => depth = Some(child_depth),
+				Some(depth) => {
+					if depth != child_depth {
+						panic!("tree not balanced")
+					}
+				}
 			}
 		}
 
-		self.nodes.shrink_to_fit()
+		match depth {
+			Some(depth) => depth + 1,
+			None => 0
+		}
 	}
 }

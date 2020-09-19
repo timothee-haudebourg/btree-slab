@@ -8,3 +8,6 @@ edition = "2018"
 
 [dependencies]
 staticvec = "^0.10.4"
+
+[dev-dependencies]
+rand = { version = "^0.7", features = ["small_rng"] }

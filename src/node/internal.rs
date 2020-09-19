@@ -6,14 +6,15 @@ use std::cmp::{
 use staticvec::StaticVec;
 use crate::{
 	Item,
+	Children,
 	Balance,
 	WouldUnderflow,
 	utils::binary_search_min
 };
 
-struct Branch<K, V> {
-	item: Item<K, V>,
-	child: usize
+pub struct Branch<K, V> {
+	pub item: Item<K, V>,
+	pub child: usize
 }
 
 impl<K: PartialEq, V> PartialEq<K> for Branch<K, V> {
@@ -25,6 +26,18 @@ impl<K: PartialEq, V> PartialEq<K> for Branch<K, V> {
 impl<K: Ord + PartialEq, V> PartialOrd<K> for Branch<K, V> {
 	fn partial_cmp(&self, key: &K) -> Option<Ordering> {
 		Some(self.item.key.cmp(key))
+	}
+}
+
+impl<K: PartialEq, V> PartialEq for Branch<K, V> {
+	fn eq(&self, other: &Branch<K, V>) -> bool {
+		self.item.key.eq(&other.item.key)
+	}
+}
+
+impl<K: Ord + PartialEq, V> PartialOrd for Branch<K, V> {
+	fn partial_cmp(&self, other: &Branch<K, V>) -> Option<Ordering> {
+		Some(self.item.key.cmp(&other.item.key))
 	}
 }
 
@@ -67,6 +80,62 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 		}
 	}
 
+	#[inline]
+	pub fn child_id_opt(&self, index: usize) -> Option<usize> {
+		if index == 0 {
+			Some(self.first_child)
+		} else {
+			self.other_children.get(index - 1).map(|b| b.child)
+		}
+	}
+
+	#[inline]
+	pub fn separators(&self, index: usize) -> (Option<&K>, Option<&K>) {
+		let min = if index > 0 {
+			Some(&self.other_children[index - 1].item.key)
+		} else {
+			None
+		};
+
+		let max = if index < self.other_children.len() {
+			Some(&self.other_children[index].item.key)
+		} else {
+			None
+		};
+
+		(min, max)
+	}
+
+	#[inline]
+	pub fn get(&self, key: &K) -> Result<&V, usize> where K: Ord {
+		match binary_search_min(&self.other_children, key) {
+			Some(offset) => {
+				let b = &self.other_children[offset];
+				if &b.item.key == key {
+					Ok(&b.item.value)
+				} else {
+					Err(b.child)
+				}
+			},
+			None => Err(self.first_child)
+		}
+	}
+
+	#[inline]
+	pub fn get_mut(&mut self, key: &K) -> Result<&mut V, usize> where K: Ord {
+		match binary_search_min(&self.other_children, key) {
+			Some(offset) => {
+				let b = &mut self.other_children[offset];
+				if &b.item.key == key {
+					Ok(&mut b.item.value)
+				} else {
+					Err(b.child)
+				}
+			},
+			None => Err(self.first_child)
+		}
+	}
+
 	/// Find the offset of the item matching the given key.
 	///
 	/// If the key matches no item in this node,
@@ -87,6 +156,11 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 	}
 
 	#[inline]
+	pub fn children(&self) -> Children<K, V> {
+		Children::Internal(Some(self.first_child), self.other_children.as_ref().iter())
+	}
+
+	#[inline]
 	pub fn item_at_mut(&mut self, offset: usize) -> &mut Item<K, V> {
 		&mut self.other_children[offset].item
 	}
@@ -99,7 +173,7 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 					std::mem::swap(&mut value, &mut self.other_children[i].item.value);
 					Ok(value)
 				} else {
-					Err((key, value, i, self.other_children[i].child))
+					Err((key, value, i+1, self.other_children[i].child))
 				}
 			},
 			None => {
@@ -109,7 +183,7 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 	}
 
 	#[inline]
-	pub fn insert_node(&mut self, i: usize, median: Item<K, V>, node_id: usize) {
+	pub fn insert_node_after(&mut self, i: usize, median: Item<K, V>, node_id: usize) {
 		self.other_children.insert(i, Branch {
 			item: median,
 			child: node_id
@@ -122,7 +196,7 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 			Err(()) // We don't need to split.
 		} else {
 			// Index of the median-key item in `other_children`.
-			let median_i = (M - 1) / 2 - 1; // Since M is at least 4, `median_i` is at least 0.
+			let median_i = (M - 1) / 2; // Since M is at least 4, `median_i` is at least 1.
 
 			let right_other_children = self.other_children.drain(median_i+1..);
 			let median = self.other_children.pop().unwrap();
@@ -157,10 +231,11 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 		// Since left_index = right_index-1, it is indexed by `left_index` in `other_children`.
 		let item = self.other_children.remove(left_index).item;
 
-		let balancing = if self.item_count() >= 2/M {
+		let item_count = self.item_count();
+		let balancing = if item_count >= M/2 {
 			Balance::Balanced
 		} else {
-			Balance::Underflow(false)
+			Balance::Underflow(item_count == 0)
 		};
 
 		(left_id, right_id, item, balancing)
@@ -177,7 +252,7 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 
 	#[inline]
 	pub fn pop_left(&mut self) -> Result<(Item<K, V>, usize), WouldUnderflow> {
-		if self.item_count() <= 2/M {
+		if self.item_count() < M/2 {
 			Err(WouldUnderflow)
 		} else {
 			let child_id = self.first_child;
@@ -197,12 +272,27 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 
 	#[inline]
 	pub fn pop_right(&mut self) -> Result<(Item<K, V>, usize), WouldUnderflow> {
-		if self.item_count() <= 2/M {
+		if self.item_count() < M/2 {
 			Err(WouldUnderflow)
 		} else {
 			let last = self.other_children.pop().unwrap();
 			Ok((last.item, last.child))
 		}
+	}
+
+	#[inline]
+	pub fn take(&mut self, offset: usize) -> (usize, Item<K, V>, usize) {
+		let left_child_id = self.child_id(offset);
+		let b = self.other_children.remove(offset);
+		(left_child_id, b.item, b.child)
+	}
+
+	#[inline]
+	pub fn put(&mut self, offset: usize, item: Item<K, V>, right_child_id: usize) {
+		self.other_children.insert(offset, Branch {
+			item,
+			child: right_child_id
+		})
 	}
 
 	#[inline]
@@ -213,5 +303,58 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 		});
 
 		self.other_children.append(&mut other.other_children);
+	}
+
+	/// Write the label of the internal node in the DOT format.
+	///
+	/// Requires the `dot` feature.
+	#[cfg(feature = "dot")]
+	#[inline]
+	pub fn dot_write_label<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+		write!(f, "<c0> |")?;
+		let mut i = 1;
+		for branch in &self.other_children {
+			write!(f, "{{{}|<c{}> {}}} |", branch.item.key, i, branch.item.value)?;
+			i += 1;
+		}
+
+		Ok(())
+	}
+
+	#[cfg(debug_assertions)]
+	pub fn validate(&self, min: Option<&K>, max: Option<&K>) where K: Ord {
+		if min.is_some() || max.is_some() { // not root
+			if self.item_count() < (M/2 - 1) {
+				panic!("internal node is underflowing")
+			}
+
+			if self.item_count() >= M {
+				panic!("internal node is overflowing")
+			}
+		} else {
+			if self.item_count() == 0 {
+				panic!("root node is empty")
+			}
+		}
+
+		if !self.other_children.is_sorted() {
+			panic!("internal node items are not sorted")
+		}
+
+		if let Some(min) = min {
+			if let Some(b) = self.other_children.first() {
+				if min >= &b.item.key {
+					panic!("internal node item key is greater than right separator")
+				}
+			}
+		}
+
+		if let Some(max) = max {
+			if let Some(b) = self.other_children.last() {
+				if max <= &b.item.key {
+					panic!("internal node item key is less than left separator")
+				}
+			}
+		}
 	}
 }

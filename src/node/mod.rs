@@ -8,6 +8,7 @@ mod internal;
 use leaf::Leaf as LeafNode;
 use internal::Internal as InternalNode;
 
+#[derive(Debug)]
 pub enum Balance {
 	Balanced,
 	Underflow(bool) // true if the node is empty.
@@ -56,10 +57,43 @@ impl<K, V, const M: usize> Node<K, V, M> {
 	}
 
 	#[inline]
+	pub fn child_id_opt(&self, index: usize) -> Option<usize> {
+		match self {
+			Node::Internal(node) => node.child_id_opt(index),
+			Node::Leaf(_) => None,
+			_ => panic!("free node")
+		}
+	}
+
+	#[inline]
 	pub fn as_free_node(&self) -> Result<(Option<usize>, Option<usize>), ()> {
 		match self {
 			Node::Free(prev_id, next_id) => Ok((*prev_id, *next_id)),
 			_ => Err(())
+		}
+	}
+
+	#[inline]
+	pub fn get(&self, key: &K) -> Result<Option<&V>, usize> where K: Ord {
+		match self {
+			Node::Leaf(leaf) => Ok(leaf.get(key)),
+			Node::Internal(node) => match node.get(key) {
+				Ok(value) => Ok(Some(value)),
+				Err(e) => Err(e)
+			},
+			_ => panic!("free node")
+		}
+	}
+
+	#[inline]
+	pub fn get_mut(&mut self, key: &K) -> Result<Option<&mut V>, usize> where K: Ord {
+		match self {
+			Node::Leaf(leaf) => Ok(leaf.get_mut(key)),
+			Node::Internal(node) => match node.get_mut(key) {
+				Ok(value) => Ok(Some(value)),
+				Err(e) => Err(e)
+			},
+			_ => panic!("free node")
 		}
 	}
 
@@ -108,6 +142,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 		}
 	}
 
+	/// Split the node if it would overlow upon insertion.
 	#[inline]
 	pub fn split(&mut self) -> Result<(Item<K, V>, Node<K, V, M>), ()> {
 		match self {
@@ -195,6 +230,15 @@ impl<K, V, const M: usize> Node<K, V, M> {
 	}
 
 	#[inline]
+	pub fn force_take(&mut self, offset: usize) -> Result<(Item<K, V>, Balance), (usize, Item<K, V>, usize)> {
+		match self {
+			Node::Internal(node) => Err(node.take(offset)),
+			Node::Leaf(leaf) => Ok(leaf.take(offset)),
+			_ => panic!("free node")
+		}
+	}
+
+	#[inline]
 	pub fn take_rightmost_leaf(&mut self) -> Result<(Item<K, V>, Balance), (usize, usize)> {
 		match self {
 			Node::Internal(node) => {
@@ -207,11 +251,89 @@ impl<K, V, const M: usize> Node<K, V, M> {
 		}
 	}
 
+	/// Put an item in a node.
+	///
+	/// It is assumed that the node will not overflow.
+	#[inline]
+	pub fn put(&mut self, offset: usize, item: Item<K, V>, opt_right_child_id: Option<usize>) {
+		match self {
+			Node::Internal(node) => node.put(offset, item, opt_right_child_id.unwrap()),
+			Node::Leaf(leaf) => leaf.put(offset, item),
+			_ => panic!("free node")
+		}
+	}
+
 	#[inline]
 	pub fn replace(&mut self, offset: usize, item: Item<K, V>) -> Item<K, V> {
 		match self {
 			Node::Internal(node) => node.replace(offset, item),
 			_ => panic!("can only replace in internal nodes")
+		}
+	}
+
+	#[inline]
+	pub fn separators(&self, i: usize) -> (Option<&K>, Option<&K>) {
+		match self {
+			Node::Leaf(_) => (None, None),
+			Node::Internal(node) => node.separators(i),
+			_ => panic!("free node")
+		}
+	}
+
+	#[inline]
+	pub fn children(&self) -> Children<K, V> {
+		match self {
+			Node::Leaf(_) => Children::Leaf,
+			Node::Internal(node) => node.children(),
+			_ => panic!("free node")
+		}
+	}
+
+	/// Write the label of the node in the DOT format.
+	///
+	/// Requires the `dot` feature.
+	#[cfg(feature = "dot")]
+	#[inline]
+	pub fn dot_write_label<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+		match self {
+			Node::Leaf(leaf) => leaf.dot_write_label(f),
+			Node::Internal(node) => node.dot_write_label(f),
+			_ => panic!("free node")
+		}
+	}
+
+	#[cfg(debug_assertions)]
+	pub fn validate(&self, min: Option<&K>, max: Option<&K>) where K: Ord {
+		match self {
+			Node::Leaf(leaf) => leaf.validate(min, max),
+			Node::Internal(node) => node.validate(min, max),
+			_ => panic!("free node")
+		}
+	}
+}
+
+pub enum Children<'a, K, V> {
+	Leaf,
+	Internal(Option<usize>, std::slice::Iter<'a, internal::Branch<K, V>>)
+}
+
+impl<'a, K, V> Iterator for Children<'a, K, V> {
+	type Item = usize;
+
+	fn next(&mut self) -> Option<usize> {
+		match self {
+			Children::Leaf => None,
+			Children::Internal(first, rest) => {
+				match first.take() {
+					Some(child) => Some(child),
+					None => {
+						match rest.next() {
+							Some(branch) => Some(branch.child),
+							None => None
+						}
+					}
+				}
+			}
 		}
 	}
 }

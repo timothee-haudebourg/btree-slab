@@ -26,6 +26,36 @@ impl<K, V, const M: usize> Leaf<K, V, M> {
 		self.items.len()
 	}
 
+	#[inline]
+	pub fn get(&self, key: &K) -> Option<&V> where K: Ord {
+		match binary_search_min(&self.items, key) {
+			Some(i) => {
+				let item = &self.items[i];
+				if &item.key == key {
+					Some(&item.value)
+				} else {
+					None
+				}
+			},
+			_ => None
+		}
+	}
+
+	#[inline]
+	pub fn get_mut(&mut self, key: &K) -> Option<&mut V> where K: Ord {
+		match binary_search_min(&self.items, key) {
+			Some(i) => {
+				let item = &mut self.items[i];
+				if &item.key == key {
+					Some(&mut item.value)
+				} else {
+					None
+				}
+			},
+			_ => None
+		}
+	}
+
 	/// Find the offset of the item matching the given key.
 	#[inline]
 	pub fn offset_of(&self, key: &K) -> Option<usize> where K: Ord {
@@ -48,7 +78,7 @@ impl<K, V, const M: usize> Leaf<K, V, M> {
 					std::mem::swap(&mut value, &mut self.items[i].value);
 					Some(value)
 				} else {
-					self.items.insert(i + 1, Item { key, value });
+					self.items.insert(i+1, Item { key, value });
 					None
 				}
 			},
@@ -130,5 +160,54 @@ impl<K, V, const M: usize> Leaf<K, V, M> {
 	pub fn take_last(&mut self) -> (Item<K, V>, Balance) {
 		let item = self.items.pop().unwrap();
 		(item, self.balance())
+	}
+
+	/// It is assumed that the leaf will not overflow.
+	#[inline]
+	pub fn put(&mut self, offset: usize, item: Item<K, V>) {
+		self.items.insert(offset, item)
+	}
+
+	/// Write the label of the leaf in the DOT language.
+	///
+	/// Requires the `dot` feature.
+	#[cfg(feature = "dot")]
+	#[inline]
+	pub fn dot_write_label<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+		for item in &self.items {
+			write!(f, "{{{}|{}}}|", item.key, item.value)?;
+		}
+
+		Ok(())
+	}
+
+	#[cfg(debug_assertions)]
+	pub fn validate(&self, min: Option<&K>, max: Option<&K>) where K: Ord {
+		if min.is_some() || max.is_some() { // not root
+			match self.balance() {
+				Balance::Underflow(_) => panic!("leaf is underflowing"),
+				_ => ()
+			}
+		}
+
+		if !self.items.is_sorted() {
+			panic!("leaf items are not sorted")
+		}
+
+		if let Some(min) = min {
+			if let Some(item) = self.items.first() {
+				if min >= &item.key {
+					panic!("leaf item key is greater than right separator")
+				}
+			}
+		}
+
+		if let Some(max) = max {
+			if let Some(item) = self.items.last() {
+				if max <= &item.key {
+					panic!("leaf item key is less than left separator")
+				}
+			}
+		}
 	}
 }
