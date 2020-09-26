@@ -7,23 +7,44 @@ use crate::{
 };
 
 pub struct Leaf<K, V, const M: usize> {
+	parent: usize,
 	items: StaticVec<Item<K, V>, M>
 }
 
 impl<K, V, const M: usize> Leaf<K, V, M> {
 	#[inline]
-	pub fn new(item: Item<K, V>) -> Leaf<K, V, M> {
+	pub fn new(parent: Option<usize>, item: Item<K, V>) -> Leaf<K, V, M> {
 		let mut items = StaticVec::new();
 		items.push(item);
 
 		Leaf {
+			parent: parent.unwrap_or(std::usize::MAX),
 			items
 		}
 	}
 
 	#[inline]
+	pub fn parent(&self) -> Option<usize> {
+		if self.parent == std::usize::MAX {
+			None
+		} else {
+			Some(self.parent)
+		}
+	}
+
+	#[inline]
+	pub fn set_parent(&mut self, p: Option<usize>) {
+		self.parent = p.unwrap_or(std::usize::MAX);
+	}
+
+	#[inline]
 	pub fn item_count(&self) -> usize {
 		self.items.len()
+	}
+
+	#[inline]
+	pub fn items(&self) -> std::slice::Iter<Item<K, V>> {
+		self.items.as_ref().iter()
 	}
 
 	#[inline]
@@ -71,6 +92,11 @@ impl<K, V, const M: usize> Leaf<K, V, M> {
 	}
 
 	#[inline]
+	pub fn item_at_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
+		self.items.get_mut(offset)
+	}
+
+	#[inline]
 	pub fn insert(&mut self, key: K, mut value: V) -> Option<V> where K: Ord {
 		match binary_search_min(&self.items, &key) {
 			Some(i) => {
@@ -100,6 +126,7 @@ impl<K, V, const M: usize> Leaf<K, V, M> {
 			let median = self.items.pop().unwrap();
 
 			let right_leaf = Leaf {
+				parent: self.parent,
 				items: right_items
 			};
 
@@ -182,7 +209,11 @@ impl<K, V, const M: usize> Leaf<K, V, M> {
 	}
 
 	#[cfg(debug_assertions)]
-	pub fn validate(&self, min: Option<&K>, max: Option<&K>) where K: Ord {
+	pub fn validate(&self, parent: Option<usize>, min: Option<&K>, max: Option<&K>) where K: Ord {
+		if self.parent() != parent {
+			panic!("wrong parent")
+		}
+
 		if min.is_some() || max.is_some() { // not root
 			match self.balance() {
 				Balance::Underflow(_) => panic!("leaf is underflowing"),

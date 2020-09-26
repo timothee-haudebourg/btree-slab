@@ -7,6 +7,7 @@ use staticvec::StaticVec;
 use crate::{
 	Item,
 	Children,
+	ChildrenWithSeparators,
 	Balance,
 	WouldUnderflow,
 	utils::binary_search_min
@@ -42,13 +43,14 @@ impl<K: Ord + PartialEq, V> PartialOrd for Branch<K, V> {
 }
 
 pub struct Internal<K, V, const M: usize> {
+	parent: usize,
 	first_child: usize,
 	other_children: StaticVec<Branch<K, V>, M /* should be M-1, but it's not supported by Rust. */>
 }
 
 impl<K, V, const M: usize> Internal<K, V, M> {
 	#[inline]
-	pub fn binary(left_id: usize, median: Item<K, V>, right_id: usize) -> Internal<K, V, M> {
+	pub fn binary(parent: Option<usize>, left_id: usize, median: Item<K, V>, right_id: usize) -> Internal<K, V, M> {
 		let mut other_children = StaticVec::new();
 		other_children.push(Branch {
 			item: median,
@@ -56,9 +58,24 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 		});
 
 		Internal {
+			parent: parent.unwrap_or(std::usize::MAX),
 			first_child: left_id,
 			other_children
 		}
+	}
+
+	#[inline]
+	pub fn parent(&self) -> Option<usize> {
+		if self.parent == std::usize::MAX {
+			None
+		} else {
+			Some(self.parent)
+		}
+	}
+
+	#[inline]
+	pub fn set_parent(&mut self, p: Option<usize>) {
+		self.parent = p.unwrap_or(std::usize::MAX);
 	}
 
 	#[inline]
@@ -69,6 +86,16 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 	#[inline]
 	pub fn child_count(&self) -> usize {
 		1usize + self.item_count()
+	}
+
+	#[inline]
+	pub fn first_child_id(&self) -> usize {
+		self.first_child
+	}
+
+	#[inline]
+	pub fn branches(&self) -> &[Branch<K, V>] {
+		self.other_children.as_ref()
 	}
 
 	#[inline]
@@ -161,8 +188,21 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 	}
 
 	#[inline]
+	pub fn children_with_separators(&self) -> ChildrenWithSeparators<K, V> {
+		ChildrenWithSeparators::Internal(Some(self.first_child), None, self.other_children.as_ref().iter().peekable())
+	}
+
+	#[inline]
 	pub fn item_at_mut(&mut self, offset: usize) -> &mut Item<K, V> {
 		&mut self.other_children[offset].item
+	}
+
+	#[inline]
+	pub fn item_at_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
+		match self.other_children.get_mut(offset) {
+			Some(b) => Some(&mut b.item),
+			None => None
+		}
 	}
 
 	#[inline]
@@ -202,6 +242,7 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 			let median = self.other_children.pop().unwrap();
 
 			let right_node = Internal {
+				parent: self.parent,
 				first_child: median.child,
 				other_children: right_other_children
 			};
@@ -322,7 +363,11 @@ impl<K, V, const M: usize> Internal<K, V, M> {
 	}
 
 	#[cfg(debug_assertions)]
-	pub fn validate(&self, min: Option<&K>, max: Option<&K>) where K: Ord {
+	pub fn validate(&self, parent: Option<usize>, min: Option<&K>, max: Option<&K>) where K: Ord {
+		if self.parent() != parent {
+			panic!("wrong parent")
+		}
+
 		if min.is_some() || max.is_some() { // not root
 			if self.item_count() < (M/2 - 1) {
 				panic!("internal node is underflowing")

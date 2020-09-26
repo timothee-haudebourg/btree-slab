@@ -18,9 +18,6 @@ pub struct WouldUnderflow;
 
 /// B-tree node.
 pub enum Node<K, V, const M: usize> {
-	/// Free node pointing to the previous and next free node if any.
-	Free(Option<usize>, Option<usize>),
-
 	/// Internal node.
 	Internal(InternalNode<K, V, M>),
 
@@ -30,21 +27,36 @@ pub enum Node<K, V, const M: usize> {
 
 impl<K, V, const M: usize> Node<K, V, M> {
 	#[inline]
-	pub fn binary(left_id: usize, median: Item<K, V>, right_id: usize) -> Node<K, V, M> {
-		Node::Internal(InternalNode::binary(left_id, median, right_id))
+	pub fn binary(parent: Option<usize>, left_id: usize, median: Item<K, V>, right_id: usize) -> Node<K, V, M> {
+		Node::Internal(InternalNode::binary(parent, left_id, median, right_id))
 	}
 
 	#[inline]
-	pub fn leaf(item: Item<K, V>) -> Node<K, V, M> {
-		Node::Leaf(LeafNode::new(item))
+	pub fn leaf(parent: Option<usize>, item: Item<K, V>) -> Node<K, V, M> {
+		Node::Leaf(LeafNode::new(parent, item))
+	}
+
+	#[inline]
+	pub fn parent(&self) -> Option<usize> {
+		match self {
+			Node::Internal(node) => node.parent(),
+			Node::Leaf(leaf) => leaf.parent()
+		}
+	}
+
+	#[inline]
+	pub fn set_parent(&mut self, p: Option<usize>) {
+		match self {
+			Node::Internal(node) => node.set_parent(p),
+			Node::Leaf(leaf) => leaf.set_parent(p)
+		}
 	}
 
 	#[inline]
 	pub fn child_count(&self) -> usize {
 		match self {
 			Node::Internal(node) => node.child_count(),
-			Node::Leaf(_) => 0,
-			_ => panic!("free node have no children")
+			Node::Leaf(_) => 0
 		}
 	}
 
@@ -60,16 +72,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 	pub fn child_id_opt(&self, index: usize) -> Option<usize> {
 		match self {
 			Node::Internal(node) => node.child_id_opt(index),
-			Node::Leaf(_) => None,
-			_ => panic!("free node")
-		}
-	}
-
-	#[inline]
-	pub fn as_free_node(&self) -> Result<(Option<usize>, Option<usize>), ()> {
-		match self {
-			Node::Free(prev_id, next_id) => Ok((*prev_id, *next_id)),
-			_ => Err(())
+			Node::Leaf(_) => None
 		}
 	}
 
@@ -80,8 +83,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 			Node::Internal(node) => match node.get(key) {
 				Ok(value) => Ok(Some(value)),
 				Err(e) => Err(e)
-			},
-			_ => panic!("free node")
+			}
 		}
 	}
 
@@ -92,8 +94,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 			Node::Internal(node) => match node.get_mut(key) {
 				Ok(value) => Ok(Some(value)),
 				Err(e) => Err(e)
-			},
-			_ => panic!("free node")
+			}
 		}
 	}
 
@@ -112,8 +113,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 			Node::Leaf(leaf) => match leaf.offset_of(key) {
 				Some(i) => Ok(i),
 				None =>  Err(None)
-			},
-			_ => panic!("free nodes have no items")
+			}
 		}
 	}
 
@@ -121,8 +121,15 @@ impl<K, V, const M: usize> Node<K, V, M> {
 	pub fn item_at_mut(&mut self, offset: usize) -> &mut Item<K, V> {
 		match self {
 			Node::Internal(node) => node.item_at_mut(offset),
-			Node::Leaf(leaf) => leaf.item_at_mut(offset),
-			_ => panic!("free node have no items")
+			Node::Leaf(leaf) => leaf.item_at_mut(offset)
+		}
+	}
+
+	#[inline]
+	pub fn item_at_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
+		match self {
+			Node::Internal(node) => node.item_at_mut_opt(offset),
+			Node::Leaf(leaf) => leaf.item_at_mut_opt(offset)
 		}
 	}
 
@@ -137,8 +144,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 				Ok(value) => Ok(Some(value)),
 				Err(e) => Err(e)
 			},
-			Node::Leaf(leaf) => Ok(leaf.insert(key, value)),
-			_ => panic!("cannot insert on free node")
+			Node::Leaf(leaf) => Ok(leaf.insert(key, value))
 		}
 	}
 
@@ -153,8 +159,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 			Node::Leaf(leaf) => match leaf.split() {
 				Ok((v, leaf)) => Ok((v, Node::Leaf(leaf))),
 				Err(()) => Err(())
-			},
-			_ => panic!("cannot split on free node")
+			}
 		}
 	}
 
@@ -179,8 +184,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 	pub fn push_left(&mut self, item: Item<K, V>, opt_child_id: Option<usize>) {
 		match self {
 			Node::Internal(node) => node.push_left(item, opt_child_id.unwrap()),
-			Node::Leaf(leaf) => leaf.push_left(item),
-			_ => panic!("free node")
+			Node::Leaf(leaf) => leaf.push_left(item)
 		}
 	}
 
@@ -191,8 +195,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 				let (item, child_id) = node.pop_left()?;
 				Ok((item, Some(child_id)))
 			},
-			Node::Leaf(leaf) => Ok((leaf.pop_left()?, None)),
-			_ => panic!("free node")
+			Node::Leaf(leaf) => Ok((leaf.pop_left()?, None))
 		}
 	}
 
@@ -200,8 +203,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 	pub fn push_right(&mut self, item: Item<K, V>, opt_child_id: Option<usize>) {
 		match self {
 			Node::Internal(node) => node.push_right(item, opt_child_id.unwrap()),
-			Node::Leaf(leaf) => leaf.push_right(item),
-			_ => panic!("free node")
+			Node::Leaf(leaf) => leaf.push_right(item)
 		}
 	}
 
@@ -212,8 +214,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 				let (item, child_id) = node.pop_right()?;
 				Ok((item, Some(child_id)))
 			},
-			Node::Leaf(leaf) => Ok((leaf.pop_right()?, None)),
-			_ => panic!("free node")
+			Node::Leaf(leaf) => Ok((leaf.pop_right()?, None))
 		}
 	}
 
@@ -224,8 +225,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 				let left_child_index = offset;
 				Err(node.child_id(left_child_index))
 			},
-			Node::Leaf(leaf) => Ok(leaf.take(offset)),
-			_ => panic!("free node")
+			Node::Leaf(leaf) => Ok(leaf.take(offset))
 		}
 	}
 
@@ -233,8 +233,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 	pub fn force_take(&mut self, offset: usize) -> Result<(Item<K, V>, Balance), (usize, Item<K, V>, usize)> {
 		match self {
 			Node::Internal(node) => Err(node.take(offset)),
-			Node::Leaf(leaf) => Ok(leaf.take(offset)),
-			_ => panic!("free node")
+			Node::Leaf(leaf) => Ok(leaf.take(offset))
 		}
 	}
 
@@ -246,8 +245,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 				let child_id = node.child_id(child_index);
 				Err((child_index, child_id))
 			},
-			Node::Leaf(leaf) => Ok(leaf.take_last()),
-			_ => panic!("free node")
+			Node::Leaf(leaf) => Ok(leaf.take_last())
 		}
 	}
 
@@ -258,8 +256,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 	pub fn put(&mut self, offset: usize, item: Item<K, V>, opt_right_child_id: Option<usize>) {
 		match self {
 			Node::Internal(node) => node.put(offset, item, opt_right_child_id.unwrap()),
-			Node::Leaf(leaf) => leaf.put(offset, item),
-			_ => panic!("free node")
+			Node::Leaf(leaf) => leaf.put(offset, item)
 		}
 	}
 
@@ -275,8 +272,7 @@ impl<K, V, const M: usize> Node<K, V, M> {
 	pub fn separators(&self, i: usize) -> (Option<&K>, Option<&K>) {
 		match self {
 			Node::Leaf(_) => (None, None),
-			Node::Internal(node) => node.separators(i),
-			_ => panic!("free node")
+			Node::Internal(node) => node.separators(i)
 		}
 	}
 
@@ -284,8 +280,15 @@ impl<K, V, const M: usize> Node<K, V, M> {
 	pub fn children(&self) -> Children<K, V> {
 		match self {
 			Node::Leaf(_) => Children::Leaf,
-			Node::Internal(node) => node.children(),
-			_ => panic!("free node")
+			Node::Internal(node) => node.children()
+		}
+	}
+
+	#[inline]
+	pub fn children_with_separators(&self) -> ChildrenWithSeparators<K, V> {
+		match self {
+			Node::Leaf(_) => ChildrenWithSeparators::Leaf,
+			Node::Internal(node) => node.children_with_separators()
 		}
 	}
 
@@ -297,17 +300,15 @@ impl<K, V, const M: usize> Node<K, V, M> {
 	pub fn dot_write_label<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
 		match self {
 			Node::Leaf(leaf) => leaf.dot_write_label(f),
-			Node::Internal(node) => node.dot_write_label(f),
-			_ => panic!("free node")
+			Node::Internal(node) => node.dot_write_label(f)
 		}
 	}
 
 	#[cfg(debug_assertions)]
-	pub fn validate(&self, min: Option<&K>, max: Option<&K>) where K: Ord {
+	pub fn validate(&self, parent: Option<usize>, min: Option<&K>, max: Option<&K>) where K: Ord {
 		match self {
-			Node::Leaf(leaf) => leaf.validate(min, max),
-			Node::Internal(node) => node.validate(min, max),
-			_ => panic!("free node")
+			Node::Leaf(leaf) => leaf.validate(parent, min, max),
+			Node::Internal(node) => node.validate(parent, min, max)
 		}
 	}
 }
@@ -320,6 +321,7 @@ pub enum Children<'a, K, V> {
 impl<'a, K, V> Iterator for Children<'a, K, V> {
 	type Item = usize;
 
+	#[inline]
 	fn next(&mut self) -> Option<usize> {
 		match self {
 			Children::Leaf => None,
@@ -329,6 +331,48 @@ impl<'a, K, V> Iterator for Children<'a, K, V> {
 					None => {
 						match rest.next() {
 							Some(branch) => Some(branch.child),
+							None => None
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+pub enum ChildrenWithSeparators<'a, K, V> {
+	Leaf,
+	Internal(Option<usize>, Option<&'a Item<K, V>>, std::iter::Peekable<std::slice::Iter<'a, internal::Branch<K, V>>>)
+}
+
+impl<'a, K, V> Iterator for ChildrenWithSeparators<'a, K, V> {
+	type Item = (Option<&'a Item<K, V>>, usize, Option<&'a Item<K, V>>);
+
+	#[inline]
+	fn next(&mut self) -> Option<Self::Item> {
+		match self {
+			ChildrenWithSeparators::Leaf => None,
+			ChildrenWithSeparators::Internal(first, left_sep, rest) => {
+				match first.take() {
+					Some(child) => {
+						let right_sep = match rest.peek() {
+							Some(right) => Some(&right.item),
+							None => None
+						};
+						*left_sep = right_sep;
+						Some((None, child, right_sep))
+					},
+					None => {
+						match rest.next() {
+							Some(branch) => {
+								let right_sep = match rest.peek() {
+									Some(right) => Some(&right.item),
+									None => None
+								};
+								let result = Some((*left_sep, branch.child, right_sep));
+								*left_sep = right_sep;
+								result
+							},
 							None => None
 						}
 					}

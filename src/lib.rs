@@ -1,8 +1,10 @@
 #![feature(min_const_generics)]
 #![feature(move_ref_pattern)]
 #![feature(is_sorted)]
+use slab::Slab;
+use staticvec::StaticVec;
 
-mod utils;
+pub mod utils;
 mod node;
 mod item;
 
@@ -15,6 +17,16 @@ pub use item::*;
 /// These methods are not intended to be directly called by users, but can be used to
 /// extends the data structure with new functionalities.
 pub trait BTreeExt<K, V, const M: usize> {
+	/// Set the new known number of items in the tree.
+	fn set_len(&mut self, len: usize);
+
+	/// Get the root node id.
+	///
+	/// Returns `None` if the tree is empty.
+	fn root_id(&self) -> Option<usize>;
+
+	fn set_root_id(&mut self, id: Option<usize>);
+
 	/// Get the node associated to the given `id`.
 	///
 	/// Panics if `id` is out of bounds.
@@ -84,33 +96,29 @@ pub trait BTreeExt<K, V, const M: usize> {
 	///
 	/// Panics if the tree is not a valid B-Tree.
 	#[cfg(debug_assertions)]
-	fn validate_node(&self, id: usize, min: Option<&K>, max: Option<&K>) -> usize where K: Ord;
+	fn validate_node(&self, id: usize, parent: Option<usize>, min: Option<&K>, max: Option<&K>) -> usize where K: Ord;
 }
 
 /// B-tree of Knuth order `M` storing keys of type `K` associated to values of type `V`.
 ///
 /// The Knuth order must be at least 4.
-pub struct BTree<K, V, const M: usize> {
+pub struct BTreeMap<K, V, const M: usize> {
 	/// Allocated and free nodes.
-	nodes: Vec<Node<K, V, M>>,
+	nodes: Slab<Node<K, V, M>>,
 
 	/// Root node id.
 	root: Option<usize>,
 
-	/// First free node.
-	first_free_node: Option<usize>,
-
 	len: usize
 }
 
-impl<K, V, const M: usize> BTree<K, V, M> {
+impl<K, V, const M: usize> BTreeMap<K, V, M> {
 	/// Create a new empty B-tree.
-	pub fn new() -> BTree<K, V, M> {
+	pub fn new() -> BTreeMap<K, V, M> {
 		assert!(M >= 4);
-		BTree {
-			nodes: Vec::new(),
+		BTreeMap {
+			nodes: Slab::new(),
 			root: None,
-			first_free_node: None,
 			len: 0
 		}
 	}
@@ -150,16 +158,21 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 	#[inline]
 	pub fn insert(&mut self, key: K, value: V) -> Option<V> where K: Ord {
 		match self.root {
-			Some(id) => {
-				let root = &mut self.nodes[id];
+			Some(left_id) => {
+				let root = &mut self.nodes[left_id];
 				let id = match root.split() {
 					Ok((median, right_node)) => {
-						let new_root = Node::binary(id, median, self.allocate_node(right_node));
+						let right_id = self.allocate_node(right_node);
+						let new_root = Node::binary(None, left_id, median, right_id);
 						let id = self.allocate_node(new_root);
+
 						self.root = Some(id);
+						self.nodes[left_id].set_parent(self.root);
+						self.nodes[right_id].set_parent(self.root);
+
 						id
 					},
-					_ => id
+					_ => left_id
 				};
 
 				let old_value = self.insert_into(key, value, id);
@@ -170,7 +183,7 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 				old_value
 			},
 			None => {
-				let new_root = Node::leaf(Item { key, value });
+				let new_root = Node::leaf(None, Item { key, value });
 				self.root = Some(self.allocate_node(new_root));
 				self.len += 1;
 				None
@@ -187,6 +200,12 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 					match balance {
 						Balance::Underflow(true) => { // The root is empty.
 							self.root = self.node(id).child_id_opt(0);
+
+							// update root's parent
+							if let Some(root_id) = self.root {
+								self.node_mut(root_id).set_parent(None)
+							}
+
 							self.release_node(id);
 						},
 						_ => ()
@@ -223,6 +242,12 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 				match balance {
 					Balance::Underflow(true) => { // The root is empty.
 						self.root = self.node(id).child_id_opt(0);
+
+						// update root's parent
+						if let Some(root_id) = self.root {
+							self.node_mut(root_id).set_parent(None)
+						}
+
 						self.release_node(id);
 					},
 					_ => ()
@@ -234,7 +259,7 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 				let (to_insert, result) = action(None);
 
 				if let Some(value) = to_insert {
-					let new_root = Node::leaf(Item { key, value });
+					let new_root = Node::leaf(None, Item { key, value });
 					self.root = Some(self.allocate_node(new_root));
 					self.len += 1;
 				}
@@ -242,44 +267,6 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 				result
 			}
 		}
-	}
-
-	/// Shrink the capacity of the internal vector as much as possible.
-	///
-	/// Note that because of the internal fragmentation of the internal node vector,
-	/// the capacity may still be larger than the number of nodes in the tree.
-	#[inline]
-	pub fn shrink_to_fit(&mut self) {
-		loop {
-			match self.nodes.last() {
-				Some(last) => match last.as_free_node() {
-					Ok((prev_id, next_id)) => {
-						match prev_id {
-							Some(prev_id) => match &mut self.nodes[prev_id] {
-								Node::Free(_, id) => {
-									*id = next_id
-								},
-								_ => unreachable!()
-							},
-							None => self.first_free_node = next_id
-						}
-
-						if let Some(next_id) = next_id {
-							match &mut self.nodes[next_id] {
-								Node::Free(id, _) => {
-									*id = prev_id
-								},
-								_ => unreachable!()
-							}
-						}
-					},
-					Err(_) => break
-				},
-				None => break
-			}
-		}
-
-		self.nodes.shrink_to_fit()
 	}
 
 	/// Write the tree in the DOT graph descrption language.
@@ -306,6 +293,10 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 		let node = self.node(id);
 
 		write!(f, "\t{} [label=\"", name)?;
+		if let Some(parent) = node.parent() {
+			write!(f, "({})|", parent)?;
+		}
+
 		node.dot_write_label(f)?;
 		write!(f, "({})\"];\n", id)?;
 
@@ -319,7 +310,22 @@ impl<K, V, const M: usize> BTree<K, V, M> {
 	}
 }
 
-impl<K, V, const M: usize> BTreeExt<K, V, M> for BTree<K, V, M> {
+impl<K, V, const M: usize> BTreeExt<K, V, M> for BTreeMap<K, V, M> {
+	#[inline]
+	fn set_len(&mut self, new_len: usize) {
+		self.len = new_len
+	}
+
+	#[inline]
+	fn set_root_id(&mut self, id: Option<usize>) {
+		self.root = id
+	}
+
+	#[inline]
+	fn root_id(&self) -> Option<usize> {
+		self.root
+	}
+
 	#[inline]
 	fn node(&self, id: usize) -> &Node<K, V, M> {
 		&self.nodes[id]
@@ -578,6 +584,12 @@ impl<K, V, const M: usize> BTreeExt<K, V, M> for BTree<K, V, M> {
 			Ok((mut value, opt_child_id)) => {
 				std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(pivot_index));
 				self.nodes[deficient_child_id].push_right(value, opt_child_id);
+
+				// update opt_child's parent
+				if let Some(child_id) = opt_child_id {
+					self.nodes[child_id].set_parent(Some(deficient_child_id))
+				}
+
 				true // rotation succeeded
 			},
 			Err(WouldUnderflow) => false // the right sibling would underflow.
@@ -601,6 +613,12 @@ impl<K, V, const M: usize> BTreeExt<K, V, M> for BTree<K, V, M> {
 				Ok((mut value, opt_child_id)) => {
 					std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(pivot_index));
 					self.nodes[deficient_child_id].push_left(value, opt_child_id);
+
+					// update opt_child's parent
+					if let Some(child_id) = opt_child_id {
+						self.nodes[child_id].set_parent(Some(deficient_child_id))
+					}
+
 					true // rotation succeeded
 				},
 				Err(WouldUnderflow) => false // the left sibling would underflow.
@@ -610,6 +628,7 @@ impl<K, V, const M: usize> BTreeExt<K, V, M> for BTree<K, V, M> {
 		}
 	}
 
+	/// Merge the child `deficient_child_index` in node `id` with one of its direct sibling.
 	#[inline]
 	fn merge(&mut self, id: usize, deficient_child_index: usize) -> Balance {
 		let (left_id, right_id, separator, balancing) = if deficient_child_index > 0 {
@@ -620,7 +639,13 @@ impl<K, V, const M: usize> BTreeExt<K, V, M> for BTree<K, V, M> {
 			self.nodes[id].merge(deficient_child_index, deficient_child_index+1)
 		};
 
+		// update children's parent.
 		let right_node = self.release_node(right_id);
+		for right_child_id in right_node.children() {
+			self.nodes[right_child_id].set_parent(Some(left_id));
+		}
+
+		// actually merge.
 		self.nodes[left_id].append(separator, right_node);
 
 		balancing
@@ -629,69 +654,31 @@ impl<K, V, const M: usize> BTreeExt<K, V, M> for BTree<K, V, M> {
 	/// Allocate a free node.
 	#[inline]
 	fn allocate_node(&mut self, node: Node<K, V, M>) -> usize {
-		// get the next free id.
-		let allocated_id = match self.first_free_node {
-			Some(id) => {
-				match self.nodes[id] {
-					Node::Free(_, next_id) => {
-						self.first_free_node = next_id; // update next free node id.
-						self.nodes[id] = node;
-						id
-					},
-					_ => unreachable!()
-				}
-			},
-			None => {
-				let id = self.nodes.len();
-				self.nodes.push(node);
-				id
-			}
-		};
+		let mut children: StaticVec<usize, M> = StaticVec::new();
+		let id = self.nodes.insert(node);
 
-		// update the next free node link.
-		match self.first_free_node {
-			Some(id) => {
-				match &mut self.nodes[id] {
-					Node::Free(prev_id, _) => {
-						*prev_id = None
-					},
-					_ => unreachable!()
-				}
-			},
-			None => ()
+		for child_id in self.nodes[id].children() {
+			children.push(child_id)
 		}
 
-		allocated_id
+		for child_id in children {
+			self.nodes[child_id].set_parent(Some(id))
+		}
+
+		id
 	}
 
 	/// Release a node.
 	#[inline]
 	fn release_node(&mut self, id: usize) -> Node<K, V, M> {
-		let mut node = Node::Free(None, self.first_free_node);
-		std::mem::swap(&mut node, &mut self.nodes[id]);
-
-		match self.first_free_node {
-			Some(id) => {
-				match &mut self.nodes[id] {
-					Node::Free(prev_id, _) => {
-						*prev_id = Some(id)
-					},
-					_ => unreachable!()
-				}
-			},
-			None => ()
-		}
-
-		self.first_free_node = Some(id);
-
-		node
+		self.nodes.remove(id)
 	}
 
 	#[cfg(debug_assertions)]
 	fn validate(&self) where K: Ord {
 		match self.root {
 			Some(id) => {
-				self.validate_node(id, None, None);
+				self.validate_node(id, None, None, None);
 			},
 			None => ()
 		}
@@ -699,15 +686,15 @@ impl<K, V, const M: usize> BTreeExt<K, V, M> for BTree<K, V, M> {
 
 	/// Validate the given node and returns the depth of the node.
 	#[cfg(debug_assertions)]
-	fn validate_node(&self, id: usize, min: Option<&K>, max: Option<&K>) -> usize where K: Ord {
+	fn validate_node(&self, id: usize, parent: Option<usize>, min: Option<&K>, max: Option<&K>) -> usize where K: Ord {
 		let node = self.node(id);
-		node.validate(min, max);
+		node.validate(parent, min, max);
 
 		let mut depth = None;
 		for (i, child_id) in node.children().enumerate() {
 			let (min, max) = node.separators(i);
 
-			let child_depth = self.validate_node(child_id, min, max);
+			let child_depth = self.validate_node(child_id, Some(id), min, max);
 			match depth {
 				None => depth = Some(child_depth),
 				Some(depth) => {

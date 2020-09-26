@@ -4,9 +4,19 @@ use std::cmp::{
 	Ordering
 };
 
+#[derive(Clone, Copy)]
 pub struct Item<K, V> {
 	pub key: K,
 	pub value: V
+}
+
+impl<K, V> Item<K, V> {
+	pub fn new(key: K, value: V) -> Item<K, V> {
+		Item {
+			key,
+			value
+		}
+	}
 }
 
 impl<K: PartialEq, V> PartialEq<K> for Item<K, V> {
