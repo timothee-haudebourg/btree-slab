@@ -165,17 +165,18 @@ impl<K, V> Node<K, V> {
 		}
 	}
 
-	/// Split the node if it would overlow upon insertion.
+	/// Split the node.
+	/// Return the length of the node after split, the median item and the right node.
 	#[inline]
-	pub fn split(&mut self) -> (Item<K, V>, Node<K, V>) {
+	pub fn split(&mut self) -> (usize, Item<K, V>, Node<K, V>) {
 		match self {
 			Node::Internal(node) => {
-				let (item, right_node) = node.split();
-				(item, Node::Internal(right_node))
+				let (len, item, right_node) = node.split();
+				(len, item, Node::Internal(right_node))
 			},
 			Node::Leaf(leaf) => {
-				let (item, right_leaf) = leaf.split();
-				(item, Node::Leaf(right_leaf))
+				let (len, item, right_leaf) = leaf.split();
+				(len, item, Node::Leaf(right_leaf))
 			}
 		}
 	}

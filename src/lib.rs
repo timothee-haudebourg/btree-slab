@@ -456,7 +456,7 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 					break
 				},
 				Balance::Overflow => {
-					let (median, right_node) = self.node_mut(id).split();
+					let (left_node_len, median, right_node) = self.node_mut(id).split();
 					let right_id = self.allocate_node(right_node);
 
 					match self.node(id).parent() {

@@ -118,7 +118,7 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[inline]
-	pub fn split(&mut self) -> (Item<K, V>, Leaf<K, V>) {
+	pub fn split(&mut self) -> (usize, Item<K, V>, Leaf<K, V>) {
 		let median_i = M / 2;
 
 		let right_items = self.items.drain(median_i+1..);
@@ -129,7 +129,7 @@ impl<K, V> Leaf<K, V> {
 			items: right_items
 		};
 
-		(median, right_leaf)
+		(self.items.len(), median, right_leaf)
 	}
 
 	#[inline]

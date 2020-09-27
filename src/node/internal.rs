@@ -294,7 +294,7 @@ impl<K, V> Internal<K, V> {
 	}
 
 	#[inline]
-	pub fn split(&mut self) -> (Item<K, V>, Internal<K, V>) {
+	pub fn split(&mut self) -> (usize, Item<K, V>, Internal<K, V>) {
 		// Index of the median-key item in `other_children`.
 		let median_i = (M - 1) / 2; // Since M is at least 3, `median_i` is at least 1.
 
@@ -307,7 +307,7 @@ impl<K, V> Internal<K, V> {
 			other_children: right_other_children
 		};
 
-		(median.item, right_node)
+		(self.other_children.len(), median.item, right_node)
 	}
 
 	/// Merge the children at the given indexes.
