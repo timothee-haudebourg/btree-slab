@@ -256,7 +256,7 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn take_rightmost_leaf(&mut self) -> Result<Item<K, V>, usize> {
+	pub fn remove_rightmost_leaf(&mut self) -> Result<Item<K, V>, usize> {
 		match self {
 			Node::Internal(node) => {
 				let child_index = node.child_count() - 1;

@@ -46,13 +46,13 @@ pub trait BTreeExt<K, V> {
 	/// Insert a key-value pair in an internal or leaf node.
 	///
 	/// It is assumed that there is still one free space in the node.
-	fn insert_into(&mut self, node_id: usize, key: K, value: V) -> (ItemAddr, Option<V>) where K: Ord;
+	fn insert_into(&mut self, node_id: usize, key: K, value: V) -> (Option<V>, ItemAddr) where K: Ord;
 
 	/// Rebalance a node, if necessary.
-	fn rebalance(&mut self, node_id: usize);
+	fn rebalance(&mut self, node_id: usize, addr: ItemAddr) -> ItemAddr;
 
 	/// Remove the item matching the given key from the given node `node_id`.
-	fn remove_from(&mut self, node_id: usize, key: &K) -> Option<V> where K: Ord;
+	fn remove_from(&mut self, node_id: usize, key: &K) -> Option<(V, ItemAddr)> where K: Ord;
 
 	// /// Update a value in the given node `node_id`.
 	// fn update_in<T, F>(&mut self, key: K, action: F, id: usize) -> (T, Balance) where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T);
@@ -157,41 +157,9 @@ impl<K, V> BTreeMap<K, V> {
 	/// Insert a key-value pair in the tree.
 	#[inline]
 	pub fn insert(&mut self, key: K, value: V) -> Option<V> where K: Ord {
-		// match self.root {
-		// 	Some(left_id) => {
-		// 		let root = &mut self.nodes[left_id];
-		// 		let id = match root.split() {
-		// 			Ok((median, right_node)) => {
-		// 				let right_id = self.allocate_node(right_node);
-		// 				let new_root = Node::binary(None, left_id, median, right_id);
-		// 				let id = self.allocate_node(new_root);
-		//
-		// 				self.root = Some(id);
-		// 				self.nodes[left_id].set_parent(self.root);
-		// 				self.nodes[right_id].set_parent(self.root);
-		//
-		// 				id
-		// 			},
-		// 			_ => left_id
-		// 		};
-		//
-		// 		let old_value = self.insert_into(key, value, id);
-		// 		if old_value.is_none() {
-		// 			self.len += 1;
-		// 		}
-		//
-		// 		old_value
-		// 	},
-		// 	None => {
-		// 		let new_root = Node::leaf(None, Item { key, value });
-		// 		self.root = Some(self.allocate_node(new_root));
-		// 		self.len += 1;
-		// 		None
-		// 	}
-		// }
 		match self.root {
 			Some(id) => {
-				let (_, old_value) = self.insert_into(id, key, value);
+				let (old_value, _) = self.insert_into(id, key, value);
 				old_value
 			},
 			None => {
@@ -269,30 +237,6 @@ impl<K, V> BTreeMap<K, V> {
 	// 	}
 	// }
 
-	// /// Remove the item at the given address.
-	// /// Return the address of the next item.
-	// /// All other addresses are to be considered invalid.
-	// ///
-	// /// It is assumed that this item exists.
-	// fn remove_at(&mut self, addr: ItemAddr) -> (Item<K, V>, ItemAddr) {
-	// 	let (item, balance) = match self.node_mut(addr.id).take(addr.offset) {
-	// 		Ok((item, balance)) => { // removed from a leaf.
-	// 			(item, balance)
-	// 		},
-	// 		Err(left_child_id) => { // removed from an internal node.
-	// 			let left_child_index = offset;
-	// 			let (separator, left_child_balance) = self.remove_rightmost_leaf_of(left_child_id);
-	// 			let item = self.nodes[id].replace(offset, separator);
-	// 			let balance = self.rebalance_child(id, left_child_index, left_child_balance);
-	// 			(item, balance)
-	// 		}
-	// 	};
-	//
-	// 	self.rebalance(id, balance);
-	// 	// TODO
-	// 	item
-	// }
-
 	fn before(&self, id: usize, offset: usize) -> Option<ItemAddr> {
 		panic!("TODO")
 	}
@@ -305,8 +249,32 @@ impl<K, V> BTreeMap<K, V> {
 	#[inline]
 	pub fn remove(&mut self, key: &K) -> Option<V> where K: Ord {
 		match self.root {
-			Some(id) => self.remove_from(id, key),
+			Some(id) => match self.remove_from(id, key) {
+				Some((value, _)) => Some(value),
+				None => None
+			},
 			None => None
+		}
+	}
+
+	/// Remove the item at the given address.
+	/// Return the address of the next item.
+	/// All other addresses are to be considered invalid.
+	///
+	/// It is assumed that this item exists.
+	#[inline]
+	fn remove_at(&mut self, addr: ItemAddr) -> (Item<K, V>, ItemAddr) {
+		match self.node_mut(addr.id).leaf_remove(addr.offset) {
+			Ok(item) => { // removed from a leaf.
+				let addr = self.rebalance(addr.id, addr);
+				(item, addr)
+			},
+			Err(left_child_id) => { // removed from an internal node.
+				let (separator, leaf_id) = self.remove_rightmost_leaf_of(left_child_id);
+				let item = self.node_mut(addr.id).replace(addr.offset, separator);
+				let addr = self.rebalance(leaf_id, addr);
+				(item, addr)
+			}
 		}
 	}
 
@@ -461,14 +429,12 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 	///
 	/// It is assumed that there is still one free space in the node.
 	#[inline]
-	fn insert_into(&mut self, mut id: usize, mut key: K, mut value: V) -> (ItemAddr, Option<V>) where K: Ord {
+	fn insert_into(&mut self, mut id: usize, mut key: K, mut value: V) -> (Option<V>, ItemAddr) where K: Ord {
 		loop {
 			match self.node_mut(id).insert_by_key(key, value) {
 				Ok((offset, old_value)) => {
-					let addr = ItemAddr { id, offset };
-					self.rebalance(id);
-					panic!("change addr");
-					return (addr, old_value)
+					let addr = self.rebalance(id, ItemAddr { id, offset });
+					return (old_value, addr)
 				},
 				Err((k, v, _, child_id)) => {
 					key = k;
@@ -481,7 +447,7 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 
 	/// Rebalance the given node.
 	#[inline]
-	fn rebalance(&mut self, mut id: usize) {
+	fn rebalance(&mut self, mut id: usize, addr: ItemAddr) -> ItemAddr {
 		let mut balance = self.node(id).balance();
 
 		loop {
@@ -541,26 +507,18 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 				}
 			}
 		}
+
+		addr
 	}
 
 	/// Remove the item matching the given key from the given internal node `id`.
 	#[inline]
-	fn remove_from(&mut self, mut id: usize, key: &K) -> Option<V> where K: Ord {
+	fn remove_from(&mut self, mut id: usize, key: &K) -> Option<(V, ItemAddr)> where K: Ord {
 		loop {
 			match self.nodes[id].offset_of(key) {
 				Ok(offset) => {
-					match self.nodes[id].leaf_remove(offset) {
-						Ok(item) => { // removed from a leaf.
-							self.rebalance(id);
-							return Some(item.value)
-						},
-						Err(left_child_id) => { // removed from an internal node.
-							let (separator, leaf_id) = self.remove_rightmost_leaf_of(left_child_id);
-							let item = self.nodes[id].replace(offset, separator);
-							self.rebalance(leaf_id);
-							return Some(item.value)
-						}
-					}
+					let (item, addr) = self.remove_at(ItemAddr { id, offset });
+					return Some((item.value, addr))
 				},
 				Err(Some(child_id)) => {
 					id = child_id;
@@ -659,7 +617,7 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 	#[inline]
 	fn remove_rightmost_leaf_of(&mut self, mut id: usize) -> (Item<K, V>, usize) {
 		loop {
-			match self.nodes[id].take_rightmost_leaf() {
+			match self.nodes[id].remove_rightmost_leaf() {
 				Ok(result) => return (result, id),
 				Err(child_id) => {
 					id = child_id;
