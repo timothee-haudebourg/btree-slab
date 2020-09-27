@@ -5,6 +5,12 @@ use std::cmp::{
 };
 
 #[derive(Clone, Copy)]
+pub struct ItemAddr {
+	pub id: usize,
+	pub offset: usize
+}
+
+#[derive(Clone, Copy)]
 pub struct Item<K, V> {
 	pub key: K,
 	pub value: V

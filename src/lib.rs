@@ -11,12 +11,14 @@ mod item;
 pub use node::*;
 pub use item::*;
 
+const M: usize = 6;
+
 /// Extension methods.
 ///
 /// This trait can be imported to access the internal methods of the B-Tree.
 /// These methods are not intended to be directly called by users, but can be used to
 /// extends the data structure with new functionalities.
-pub trait BTreeExt<K, V, const M: usize> {
+pub trait BTreeExt<K, V> {
 	/// Set the new known number of items in the tree.
 	fn set_len(&mut self, len: usize);
 
@@ -30,12 +32,12 @@ pub trait BTreeExt<K, V, const M: usize> {
 	/// Get the node associated to the given `id`.
 	///
 	/// Panics if `id` is out of bounds.
-	fn node(&self, id: usize) -> &Node<K, V, M>;
+	fn node(&self, id: usize) -> &Node<K, V>;
 
 	/// Get the node associated to the given `id` mutabily.
 	///
 	/// Panics if `id` is out of bounds.
-	fn node_mut(&mut self, id: usize) -> &mut Node<K, V, M>;
+	fn node_mut(&mut self, id: usize) -> &mut Node<K, V>;
 
 	fn get_in(&self, key: &K, id: usize) -> Option<&V> where K: Ord;
 
@@ -44,21 +46,19 @@ pub trait BTreeExt<K, V, const M: usize> {
 	/// Insert a key-value pair in an internal or leaf node.
 	///
 	/// It is assumed that there is still one free space in the node.
-	fn insert_into(&mut self, key: K, value: V, node_id: usize) -> Option<V> where K: Ord;
+	fn insert_into(&mut self, node_id: usize, key: K, value: V) -> (ItemAddr, Option<V>) where K: Ord;
 
-	/// Rebalance a child node, if necessary.
-	///
-	/// Return the balance of the node after rebalancing the child.
-	fn rebalance_child(&mut self, node_id: usize, child_index: usize, child_balance: Balance) -> Balance;
+	/// Rebalance a node, if necessary.
+	fn rebalance(&mut self, node_id: usize);
 
 	/// Remove the item matching the given key from the given node `node_id`.
-	fn remove_from(&mut self, key: &K, node_id: usize) -> Option<(V, Balance)> where K: Ord;
+	fn remove_from(&mut self, node_id: usize, key: &K) -> Option<V> where K: Ord;
 
-	/// Update a value in the given node `node_id`.
-	fn update_in<T, F>(&mut self, key: K, action: F, id: usize) -> (T, Balance) where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T);
+	// /// Update a value in the given node `node_id`.
+	// fn update_in<T, F>(&mut self, key: K, action: F, id: usize) -> (T, Balance) where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T);
 
 	/// Take the right-most leaf value in the given node.
-	fn remove_rightmost_leaf_of(&mut self, node_id: usize) -> (Item<K, V>, Balance);
+	fn remove_rightmost_leaf_of(&mut self, node_id: usize) -> (Item<K, V>, usize);
 
 	/// Try to rotate left the node `node_id` to benefits the child number `deficient_child_index`.
 	///
@@ -81,10 +81,10 @@ pub trait BTreeExt<K, V, const M: usize> {
 	fn merge(&mut self, node_id: usize, deficient_child_index: usize) -> Balance;
 
 	/// Allocate a free identifier for the given node.
-	fn allocate_node(&mut self, node: Node<K, V, M>) -> usize;
+	fn allocate_node(&mut self, node: Node<K, V>) -> usize;
 
 	/// Release the given node identifier and return the node it used to identify.
-	fn release_node(&mut self, id: usize) -> Node<K, V, M>;
+	fn release_node(&mut self, id: usize) -> Node<K, V>;
 
 	/// Validate the tree.
 	///
@@ -102,9 +102,9 @@ pub trait BTreeExt<K, V, const M: usize> {
 /// B-tree of Knuth order `M` storing keys of type `K` associated to values of type `V`.
 ///
 /// The Knuth order must be at least 4.
-pub struct BTreeMap<K, V, const M: usize> {
+pub struct BTreeMap<K, V> {
 	/// Allocated and free nodes.
-	nodes: Slab<Node<K, V, M>>,
+	nodes: Slab<Node<K, V>>,
 
 	/// Root node id.
 	root: Option<usize>,
@@ -112,9 +112,9 @@ pub struct BTreeMap<K, V, const M: usize> {
 	len: usize
 }
 
-impl<K, V, const M: usize> BTreeMap<K, V, M> {
+impl<K, V> BTreeMap<K, V> {
 	/// Create a new empty B-tree.
-	pub fn new() -> BTreeMap<K, V, M> {
+	pub fn new() -> BTreeMap<K, V> {
 		assert!(M >= 4);
 		BTreeMap {
 			nodes: Slab::new(),
@@ -157,29 +157,41 @@ impl<K, V, const M: usize> BTreeMap<K, V, M> {
 	/// Insert a key-value pair in the tree.
 	#[inline]
 	pub fn insert(&mut self, key: K, value: V) -> Option<V> where K: Ord {
+		// match self.root {
+		// 	Some(left_id) => {
+		// 		let root = &mut self.nodes[left_id];
+		// 		let id = match root.split() {
+		// 			Ok((median, right_node)) => {
+		// 				let right_id = self.allocate_node(right_node);
+		// 				let new_root = Node::binary(None, left_id, median, right_id);
+		// 				let id = self.allocate_node(new_root);
+		//
+		// 				self.root = Some(id);
+		// 				self.nodes[left_id].set_parent(self.root);
+		// 				self.nodes[right_id].set_parent(self.root);
+		//
+		// 				id
+		// 			},
+		// 			_ => left_id
+		// 		};
+		//
+		// 		let old_value = self.insert_into(key, value, id);
+		// 		if old_value.is_none() {
+		// 			self.len += 1;
+		// 		}
+		//
+		// 		old_value
+		// 	},
+		// 	None => {
+		// 		let new_root = Node::leaf(None, Item { key, value });
+		// 		self.root = Some(self.allocate_node(new_root));
+		// 		self.len += 1;
+		// 		None
+		// 	}
+		// }
 		match self.root {
-			Some(left_id) => {
-				let root = &mut self.nodes[left_id];
-				let id = match root.split() {
-					Ok((median, right_node)) => {
-						let right_id = self.allocate_node(right_node);
-						let new_root = Node::binary(None, left_id, median, right_id);
-						let id = self.allocate_node(new_root);
-
-						self.root = Some(id);
-						self.nodes[left_id].set_parent(self.root);
-						self.nodes[right_id].set_parent(self.root);
-
-						id
-					},
-					_ => left_id
-				};
-
-				let old_value = self.insert_into(key, value, id);
-				if old_value.is_none() {
-					self.len += 1;
-				}
-
+			Some(id) => {
+				let (_, old_value) = self.insert_into(id, key, value);
 				old_value
 			},
 			None => {
@@ -191,83 +203,160 @@ impl<K, V, const M: usize> BTreeMap<K, V, M> {
 		}
 	}
 
+	// /// Insert an item at the given address.
+	// /// Return the address of the inserted item in the tree
+	// /// (it may differ from the input address if the tree is rebalanced).
+	// ///
+	// /// ## Correctness
+	// /// It is assumed that it is btree-correct to insert the given item at the given address.
+	// fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr {
+	// 	match self.node_mut(addr.id).insert(addr.offset, item, opt_right_id) {
+	// 		Balance::Balanced => {
+	// 			addr
+	// 		},
+	// 		Balance::Overflow => {
+	// 			match self.node_mut(addr.id).split() {
+	// 				Ok((left_node_len, median, right_node)) => {
+	// 					let right_id = self.allocate_node(right_node);
+	//
+	// 					let new_addr = if addr.offset == left_node_len {
+	// 						// item is median.
+	// 						None // we don't know the median address yet.
+	// 					} else if addr.offset > left_node_len {
+	// 						// item is moved on right_node.
+	// 						Some(ItemAddr {
+	// 							id: right_id,
+	// 							offset: addr.offset - left_node_len - 1
+	// 						})
+	// 					} else {
+	// 						// item hasn't moved.
+	// 						Some(addr)
+	// 					};
+	//
+	// 					let median_addr = match self.node(addr.id).parent() {
+	// 						Some(parent_id) => {
+	// 							let offset = self.node(parent_id).child_index(addr.id).unwrap();
+	// 							let addr = ItemAddr {
+	// 								id: parent_id,
+	// 								offset
+	// 							};
+	// 							self.insert_at(addr, item, Some(right_id))
+	// 						},
+	// 						None => {
+	// 							let left_id = addr.id;
+	// 							let new_root = Node::binary(None, left_id, median, right_id);
+	// 							let id = self.allocate_node(new_root);
+	//
+	// 							self.root = Some(id);
+	// 							self.nodes[left_id].set_parent(self.root);
+	// 							self.nodes[right_id].set_parent(self.root);
+	//
+	// 							ItemAddr {
+	// 								id,
+	// 								offset: 0
+	// 							}
+	// 						}
+	// 					};
+	//
+	// 					match new_addr {
+	// 						Some(addr) => addr,
+	// 						None => median_addr
+	// 					}
+	// 				}
+	// 			}
+	// 		},
+	// 		Balance::Underflow(_) => unreachable!()
+	// 	}
+	// }
+
+	// /// Remove the item at the given address.
+	// /// Return the address of the next item.
+	// /// All other addresses are to be considered invalid.
+	// ///
+	// /// It is assumed that this item exists.
+	// fn remove_at(&mut self, addr: ItemAddr) -> (Item<K, V>, ItemAddr) {
+	// 	let (item, balance) = match self.node_mut(addr.id).take(addr.offset) {
+	// 		Ok((item, balance)) => { // removed from a leaf.
+	// 			(item, balance)
+	// 		},
+	// 		Err(left_child_id) => { // removed from an internal node.
+	// 			let left_child_index = offset;
+	// 			let (separator, left_child_balance) = self.remove_rightmost_leaf_of(left_child_id);
+	// 			let item = self.nodes[id].replace(offset, separator);
+	// 			let balance = self.rebalance_child(id, left_child_index, left_child_balance);
+	// 			(item, balance)
+	// 		}
+	// 	};
+	//
+	// 	self.rebalance(id, balance);
+	// 	// TODO
+	// 	item
+	// }
+
+	fn before(&self, id: usize, offset: usize) -> Option<ItemAddr> {
+		panic!("TODO")
+	}
+
+	fn after(&self, id: usize, offset: usize) -> Option<ItemAddr> {
+		panic!("TODO")
+	}
+
 	// Delete an item by key.
 	#[inline]
 	pub fn remove(&mut self, key: &K) -> Option<V> where K: Ord {
 		match self.root {
-			Some(id) => match self.remove_from(key, id) {
-				Some((value, balance)) => {
-					match balance {
-						Balance::Underflow(true) => { // The root is empty.
-							self.root = self.node(id).child_id_opt(0);
-
-							// update root's parent
-							if let Some(root_id) = self.root {
-								self.node_mut(root_id).set_parent(None)
-							}
-
-							self.release_node(id);
-						},
-						_ => ()
-					};
-
-					self.len -= 1;
-
-					Some(value)
-				},
-				None => None
-			},
+			Some(id) => self.remove_from(id, key),
 			None => None
 		}
 	}
 
-	/// General-purpose update function.
-	///
-	/// This can be used to insert, compare, replace or remove the value associated to the given
-	/// `key` in the tree.
-	/// The action to perform is specified by the `action` function.
-	/// This function is called once with:
-	///  - `Some(value)` when `value` is aready associated to `key` in the tree or
-	///  - `None` when the `key` is not associated to any value in the tree.
-	/// The `action` function must return a pair (`new_value`, `result`) where
-	/// `new_value` is the new value to be associated to `key`
-	/// (if it is `None` any previous binding is removed) and
-	/// `result` is the value returned by the entire `update` function call.
-	#[inline]
-	pub fn update<T, F>(&mut self, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
-		match self.root {
-			Some(id) => {
-				let (result, balance) = self.update_in(key, action, id);
-
-				match balance {
-					Balance::Underflow(true) => { // The root is empty.
-						self.root = self.node(id).child_id_opt(0);
-
-						// update root's parent
-						if let Some(root_id) = self.root {
-							self.node_mut(root_id).set_parent(None)
-						}
-
-						self.release_node(id);
-					},
-					_ => ()
-				};
-
-				result
-			},
-			None => {
-				let (to_insert, result) = action(None);
-
-				if let Some(value) = to_insert {
-					let new_root = Node::leaf(None, Item { key, value });
-					self.root = Some(self.allocate_node(new_root));
-					self.len += 1;
-				}
-
-				result
-			}
-		}
-	}
+	// /// General-purpose update function.
+	// ///
+	// /// This can be used to insert, compare, replace or remove the value associated to the given
+	// /// `key` in the tree.
+	// /// The action to perform is specified by the `action` function.
+	// /// This function is called once with:
+	// ///  - `Some(value)` when `value` is aready associated to `key` in the tree or
+	// ///  - `None` when the `key` is not associated to any value in the tree.
+	// /// The `action` function must return a pair (`new_value`, `result`) where
+	// /// `new_value` is the new value to be associated to `key`
+	// /// (if it is `None` any previous binding is removed) and
+	// /// `result` is the value returned by the entire `update` function call.
+	// #[inline]
+	// pub fn update<T, F>(&mut self, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
+	// 	match self.root {
+	// 		Some(id) => {
+	// 			let (result, balance) = self.update_in(key, action, id);
+	//
+	// 			match balance {
+	// 				Balance::Underflow(true) => { // The root is empty.
+	// 					self.root = self.node(id).child_id_opt(0);
+	//
+	// 					// update root's parent
+	// 					if let Some(root_id) = self.root {
+	// 						self.node_mut(root_id).set_parent(None)
+	// 					}
+	//
+	// 					self.release_node(id);
+	// 				},
+	// 				_ => ()
+	// 			};
+	//
+	// 			result
+	// 		},
+	// 		None => {
+	// 			let (to_insert, result) = action(None);
+	//
+	// 			if let Some(value) = to_insert {
+	// 				let new_root = Node::leaf(None, Item { key, value });
+	// 				self.root = Some(self.allocate_node(new_root));
+	// 				self.len += 1;
+	// 			}
+	//
+	// 			result
+	// 		}
+	// 	}
+	// }
 
 	/// Write the tree in the DOT graph descrption language.
 	///
@@ -310,7 +399,7 @@ impl<K, V, const M: usize> BTreeMap<K, V, M> {
 	}
 }
 
-impl<K, V, const M: usize> BTreeExt<K, V, M> for BTreeMap<K, V, M> {
+impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 	#[inline]
 	fn set_len(&mut self, new_len: usize) {
 		self.len = new_len
@@ -327,12 +416,12 @@ impl<K, V, const M: usize> BTreeExt<K, V, M> for BTreeMap<K, V, M> {
 	}
 
 	#[inline]
-	fn node(&self, id: usize) -> &Node<K, V, M> {
+	fn node(&self, id: usize) -> &Node<K, V> {
 		&self.nodes[id]
 	}
 
 	#[inline]
-	fn node_mut(&mut self, id: usize) -> &mut Node<K, V, M> {
+	fn node_mut(&mut self, id: usize) -> &mut Node<K, V> {
 		&mut self.nodes[id]
 	}
 
@@ -372,192 +461,209 @@ impl<K, V, const M: usize> BTreeExt<K, V, M> for BTreeMap<K, V, M> {
 	///
 	/// It is assumed that there is still one free space in the node.
 	#[inline]
-	fn insert_into(&mut self, mut key: K, mut value: V, mut id: usize) -> Option<V> where K: Ord {
+	fn insert_into(&mut self, mut id: usize, mut key: K, mut value: V) -> (ItemAddr, Option<V>) where K: Ord {
 		loop {
-			// Try to insert the value in the current node.
-			// For internal nodes, this works only if the key is already there.
-			match self.nodes[id].insert(key, value) {
-				Ok(old_value) => return old_value,
-				Err((k, v, child_index, child_id)) => {
-					// Direct insertion failed.
-					// We need to insert the element in a subtree.
-					let child = &mut self.nodes[child_id];
-					let child_id = match child.split() {
-						Ok((median, right_node)) => {
-							let insert_right = k > median.key;
-							let right_id = self.allocate_node(right_node);
-							match &mut self.nodes[id] {
-								Node::Internal(node) => {
-									node.insert_node_after(child_index, median, right_id)
-								},
-								_ => unreachable!()
-							}
-
-							if insert_right {
-								right_id
-							} else {
-								child_id
-							}
-						},
-						_ => child_id
-					};
-
+			match self.node_mut(id).insert_by_key(key, value) {
+				Ok((offset, old_value)) => {
+					let addr = ItemAddr { id, offset };
+					self.rebalance(id);
+					panic!("change addr");
+					return (addr, old_value)
+				},
+				Err((k, v, _, child_id)) => {
 					key = k;
 					value = v;
-					id = child_id;
+					id = child_id
 				}
 			}
 		}
 	}
 
-	/// Rebalance a child node, if necessary.
-	///
-	/// Return the balance of the node after rebalancing the child.
+	/// Rebalance the given node.
 	#[inline]
-	fn rebalance_child(&mut self, id: usize, child_index: usize, child_balance: Balance) -> Balance {
-		match child_balance {
-			Balance::Balanced => Balance::Balanced,
-			Balance::Underflow(_) => {
-				// An underflow append in the child node.
-				// First we try to rebalance the tree by rotation.
-				if self.try_rotate_left(id, child_index) || self.try_rotate_right(id, child_index) {
-					// Rotation worked.
-					Balance::Balanced
-				} else {
-					// Rotation didn't work.
-					// This means that all existing child sibling have enough few elements to be merged with this child.
-					self.merge(id, child_index)
-					// The `merge` function returns the current balance of the node `id`,
-					// since it may underflow after the merging operation.
+	fn rebalance(&mut self, mut id: usize) {
+		let mut balance = self.node(id).balance();
+
+		loop {
+			match balance {
+				Balance::Balanced => {
+					break
+				},
+				Balance::Overflow => {
+					let (median, right_node) = self.node_mut(id).split();
+					let right_id = self.allocate_node(right_node);
+
+					match self.node(id).parent() {
+						Some(parent_id) => {
+							let index = self.node(parent_id).child_index(id).unwrap();
+							self.node_mut(id).insert(index, median, Some(right_id));
+						},
+						None => {
+							let left_id = id;
+							let new_root = Node::binary(None, left_id, median, right_id);
+							let id = self.allocate_node(new_root);
+
+							self.root = Some(id);
+							self.nodes[left_id].set_parent(self.root);
+							self.nodes[right_id].set_parent(self.root);
+						}
+					}
+				},
+				Balance::Underflow(is_empty) => {
+					match self.node(id).parent() {
+						Some(parent_id) => {
+							let index = self.node(parent_id).child_index(id).unwrap();
+							// An underflow append in the child node.
+							// First we try to rebalance the tree by rotation.
+							if !self.try_rotate_left(parent_id, index) && !self.try_rotate_right(parent_id, index) {
+								// Rotation didn't work.
+								// This means that all existing child sibling have enough few elements to be merged with this child.
+								balance = self.merge(parent_id, index);
+								// The `merge` function returns the current balance of the parent node,
+								// since it may underflow after the merging operation.
+								id = parent_id
+							}
+						},
+						None => {
+							// if root is empty.
+							if is_empty {
+								self.root = self.node(id).child_id_opt(0);
+
+								// update root's parent
+								if let Some(root_id) = self.root {
+									self.node_mut(root_id).set_parent(None)
+								}
+
+								self.release_node(id);
+							}
+						}
+					}
 				}
 			}
 		}
 	}
 
 	/// Remove the item matching the given key from the given internal node `id`.
-	fn remove_from(&mut self, key: &K, id: usize) -> Option<(V, Balance)> where K: Ord {
-		match self.nodes[id].offset_of(key) {
-			Ok(offset) => {
-				match self.nodes[id].take(offset) {
-					Ok((item, balance)) => { // removed from a leaf.
-						Some((item.value, balance))
-					},
-					Err(left_child_id) => { // removed from an internal node.
-						let left_child_index = offset;
-						let (separator, left_child_balance) = self.remove_rightmost_leaf_of(left_child_id);
-						let item = self.nodes[id].replace(offset, separator);
-						let balance = self.rebalance_child(id, left_child_index, left_child_balance);
-						Some((item.value, balance))
-					}
-				}
-			},
-			Err(Some((child_index, child_id))) => {
-				match self.remove_from(key, child_id) {
-					Some((value, child_balance)) => {
-						let balance = self.rebalance_child(id, child_index, child_balance);
-						Some((value, balance))
-					},
-					None => None
-				}
-			},
-			Err(None) => None
-		}
-	}
-
-	fn update_in<T, F>(&mut self, key: K, action: F, id: usize) -> (T, Balance) where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
-		match self.nodes[id].offset_of(&key) {
-			Ok(offset) => {
-				match self.nodes[id].force_take(offset) {
-					Ok((mut item, balance)) => { // update in leaf.
-						let (to_insert, result) = action(Some(item.value));
-						match to_insert {
-							Some(value) => {
-								item.value = value;
-								self.nodes[id].put(offset, item, None);
-								(result, Balance::Balanced)
-							},
-							None => {
-								self.len -= 1;
-								(result, balance)
-							}
-						}
-					},
-					Err((left_child_id, mut item, right_child_id)) => { // update in internal node.
-						let (to_insert, result) = action(Some(item.value));
-						match to_insert {
-							Some(value) => {
-								item.value = value;
-								self.nodes[id].put(offset, item, Some(right_child_id));
-								(result, Balance::Balanced)
-							},
-							None => {
-								let left_child_index = offset;
-								let (separator, left_child_balance) = self.remove_rightmost_leaf_of(left_child_id);
-								self.nodes[id].put(offset, separator, Some(right_child_id));
-								let balance = self.rebalance_child(id, left_child_index, left_child_balance);
-								self.len -= 1;
-								(result, balance)
-							}
+	#[inline]
+	fn remove_from(&mut self, mut id: usize, key: &K) -> Option<V> where K: Ord {
+		loop {
+			match self.nodes[id].offset_of(key) {
+				Ok(offset) => {
+					match self.nodes[id].leaf_remove(offset) {
+						Ok(item) => { // removed from a leaf.
+							self.rebalance(id);
+							return Some(item.value)
+						},
+						Err(left_child_id) => { // removed from an internal node.
+							let (separator, leaf_id) = self.remove_rightmost_leaf_of(left_child_id);
+							let item = self.nodes[id].replace(offset, separator);
+							self.rebalance(leaf_id);
+							return Some(item.value)
 						}
 					}
-				}
-			},
-			Err(Some((child_index, child_id))) => { // update in child
-				// split the child if necessary.
-				let child = &mut self.nodes[child_id];
-				let child_id = match child.split() {
-					Ok((median, right_node)) => {
-						let insert_right = key > median.key;
-						let right_id = self.allocate_node(right_node);
-						match &mut self.nodes[id] {
-							Node::Internal(node) => {
-								node.insert_node_after(child_index, median, right_id)
-							},
-							_ => unreachable!()
-						}
-
-						if insert_right {
-							right_id
-						} else {
-							child_id
-						}
-					},
-					_ => child_id
-				};
-
-				let (result, child_balance) = self.update_in(key, action, child_id);
-				let balance = self.rebalance_child(id, child_index, child_balance);
-				(result, balance)
-			},
-			Err(None) => { // update nowhere. We are in a leaf.
-				let (to_insert, result) = action(None);
-
-				if let Some(value) = to_insert {
-					match self.nodes[id].insert(key, value) {
-						Ok(None) => (),
-						_ => unreachable!()
-					}
-				}
-
-				self.len += 1;
-
-				(result, Balance::Balanced)
+				},
+				Err(Some(child_id)) => {
+					id = child_id;
+				},
+				Err(None) => return None
 			}
 		}
 	}
+
+	// fn update_in<T, F>(&mut self, key: K, action: F, id: usize) -> (T, Balance) where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
+	// 	match self.nodes[id].offset_of(&key) {
+	// 		Ok(offset) => {
+	// 			match self.nodes[id].remove(offset) {
+	// 				Ok((mut item, balance)) => { // update in leaf.
+	// 					let (to_insert, result) = action(Some(item.value));
+	// 					match to_insert {
+	// 						Some(value) => {
+	// 							item.value = value;
+	// 							self.nodes[id].insert(offset, item, None);
+	// 							(result, Balance::Balanced)
+	// 						},
+	// 						None => {
+	// 							self.len -= 1;
+	// 							(result, balance)
+	// 						}
+	// 					}
+	// 				},
+	// 				Err((left_child_id, mut item, right_child_id)) => { // update in internal node.
+	// 					let (to_insert, result) = action(Some(item.value));
+	// 					match to_insert {
+	// 						Some(value) => {
+	// 							item.value = value;
+	// 							self.nodes[id].insert(offset, item, Some(right_child_id));
+	// 							(result, Balance::Balanced)
+	// 						},
+	// 						None => {
+	// 							let left_child_index = offset;
+	// 							let (separator, left_child_balance) = self.remove_rightmost_leaf_of(left_child_id);
+	// 							self.nodes[id].insert(offset, separator, Some(right_child_id));
+	// 							let balance = self.rebalance_child(id, left_child_index, left_child_balance);
+	// 							self.len -= 1;
+	// 							(result, balance)
+	// 						}
+	// 					}
+	// 				}
+	// 			}
+	// 		},
+	// 		Err(Some((child_index, child_id))) => { // update in child
+	// 			// split the child if necessary.
+	// 			let child = &mut self.nodes[child_id];
+	// 			let child_id = match child.split() {
+	// 				Ok((median, right_node)) => {
+	// 					let insert_right = key > median.key;
+	// 					let right_id = self.allocate_node(right_node);
+	// 					match &mut self.nodes[id] {
+	// 						Node::Internal(node) => {
+	// 							node.insert(child_index, median, right_id)
+	// 						},
+	// 						_ => unreachable!()
+	// 					}
+	//
+	// 					if insert_right {
+	// 						right_id
+	// 					} else {
+	// 						child_id
+	// 					}
+	// 				},
+	// 				_ => child_id
+	// 			};
+	//
+	// 			let (result, child_balance) = self.update_in(key, action, child_id);
+	// 			let balance = self.rebalance_child(id, child_index, child_balance);
+	// 			(result, balance)
+	// 		},
+	// 		Err(None) => { // update nowhere. We are in a leaf.
+	// 			let (to_insert, result) = action(None);
+	//
+	// 			if let Some(value) = to_insert {
+	// 				match self.nodes[id].insert_by_key(key, value) {
+	// 					Ok((_, None)) => (),
+	// 					_ => unreachable!()
+	// 				}
+	// 			}
+	//
+	// 			self.len += 1;
+	//
+	// 			(result, Balance::Balanced)
+	// 		}
+	// 	}
+	// }
 
 	/// Take the right-most leaf value in the given node.
 	///
 	/// Note that this does not change the registred length of the tree.
 	/// The returned item is expected to be reinserted in the tree.
 	#[inline]
-	fn remove_rightmost_leaf_of(&mut self, id: usize) -> (Item<K, V>, Balance) {
-		match self.nodes[id].take_rightmost_leaf() {
-			Ok(result) => result,
-			Err((rightmost_child_index, child_id)) => {
-				let (item, child_balance) = self.remove_rightmost_leaf_of(child_id);
-				let balance = self.rebalance_child(id, rightmost_child_index, child_balance);
-				(item, balance)
+	fn remove_rightmost_leaf_of(&mut self, mut id: usize) -> (Item<K, V>, usize) {
+		loop {
+			match self.nodes[id].take_rightmost_leaf() {
+				Ok(result) => return (result, id),
+				Err(child_id) => {
+					id = child_id;
+				}
 			}
 		}
 	}
@@ -653,7 +759,7 @@ impl<K, V, const M: usize> BTreeExt<K, V, M> for BTreeMap<K, V, M> {
 
 	/// Allocate a free node.
 	#[inline]
-	fn allocate_node(&mut self, node: Node<K, V, M>) -> usize {
+	fn allocate_node(&mut self, node: Node<K, V>) -> usize {
 		let mut children: StaticVec<usize, M> = StaticVec::new();
 		let id = self.nodes.insert(node);
 
@@ -670,7 +776,7 @@ impl<K, V, const M: usize> BTreeExt<K, V, M> for BTreeMap<K, V, M> {
 
 	/// Release a node.
 	#[inline]
-	fn release_node(&mut self, id: usize) -> Node<K, V, M> {
+	fn release_node(&mut self, id: usize) -> Node<K, V> {
 		self.nodes.remove(id)
 	}
 
@@ -708,6 +814,45 @@ impl<K, V, const M: usize> BTreeExt<K, V, M> for BTreeMap<K, V, M> {
 		match depth {
 			Some(depth) => depth + 1,
 			None => 0
+		}
+	}
+}
+
+pub struct ItemMut<'a, K, V> {
+	it: &'a mut IterMut<'a, K, V>,
+	node: usize,
+	offset: usize
+}
+
+pub struct IterMut<'a, K, V> {
+	map: &'a mut BTreeMap<K, V>,
+	current: Option<(usize, usize)>
+}
+
+impl<'a, K, V> IterMut<'a, K, V> {
+	/// Get the current item visited by the iterator.
+	fn current(&self) -> Option<&'a Item<K, V>> {
+		panic!("TODO")
+	}
+
+	fn insert(&mut self, key: K, value: V) {
+		panic!("TODO")
+	}
+
+	fn remove(&mut self) -> Option<Item<K, V>> {
+		panic!("TODO")
+	}
+}
+
+impl<'a, K, V> Iterator for IterMut<'a, K, V> {
+	type Item = &'a Item<K, V>;
+
+	fn next(&mut self) -> Option<&'a Item<K, V>> {
+		match self.current.take() {
+			Some((node, offset)) => {
+				panic!("TODO")
+			},
+			None => None
 		}
 	}
 }

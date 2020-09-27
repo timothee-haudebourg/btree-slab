@@ -1,19 +1,20 @@
 use staticvec::StaticVec;
 use crate::{
+	M,
 	Item,
 	Balance,
 	WouldUnderflow,
 	utils::binary_search_min
 };
 
-pub struct Leaf<K, V, const M: usize> {
+pub struct Leaf<K, V> {
 	parent: usize,
-	items: StaticVec<Item<K, V>, M>
+	items: StaticVec<Item<K, V>, {M+1}>
 }
 
-impl<K, V, const M: usize> Leaf<K, V, M> {
+impl<K, V> Leaf<K, V> {
 	#[inline]
-	pub fn new(parent: Option<usize>, item: Item<K, V>) -> Leaf<K, V, M> {
+	pub fn new(parent: Option<usize>, item: Item<K, V>) -> Leaf<K, V> {
 		let mut items = StaticVec::new();
 		items.push(item);
 
@@ -39,7 +40,8 @@ impl<K, V, const M: usize> Leaf<K, V, M> {
 
 	#[inline]
 	pub fn item_count(&self) -> usize {
-		self.items.len()
+		let mut len = self.items.len();
+		len
 	}
 
 	#[inline]
@@ -97,45 +99,41 @@ impl<K, V, const M: usize> Leaf<K, V, M> {
 	}
 
 	#[inline]
-	pub fn insert(&mut self, key: K, mut value: V) -> Option<V> where K: Ord {
+	pub fn insert_by_key(&mut self, key: K, mut value: V) -> (usize, Option<V>) where K: Ord {
 		match binary_search_min(&self.items, &key) {
 			Some(i) => {
 				if self.items[i].key == key {
 					std::mem::swap(&mut value, &mut self.items[i].value);
-					Some(value)
+					(i, Some(value))
 				} else {
 					self.items.insert(i+1, Item { key, value });
-					None
+					(i+1, None)
 				}
 			},
 			None => {
 				self.items.insert(0, Item { key, value });
-				None
+				(0, None)
 			}
 		}
 	}
 
 	#[inline]
-	pub fn split(&mut self) -> Result<(Item<K, V>, Leaf<K, V, M>), ()> {
-		if self.items.len() < M {
-			Err(()) // We don't need to split.
-		} else {
-			let median_i = M / 2;
+	pub fn split(&mut self) -> (Item<K, V>, Leaf<K, V>) {
+		let median_i = M / 2;
 
-			let right_items = self.items.drain(median_i+1..);
-			let median = self.items.pop().unwrap();
+		let right_items = self.items.drain(median_i+1..);
+		let median = self.items.pop().unwrap();
 
-			let right_leaf = Leaf {
-				parent: self.parent,
-				items: right_items
-			};
+		let right_leaf = Leaf {
+			parent: self.parent,
+			items: right_items
+		};
 
-			Ok((median, right_leaf))
-		}
+		(median, right_leaf)
 	}
 
 	#[inline]
-	pub fn append(&mut self, separator: Item<K, V>, mut other: Leaf<K, V, M>) {
+	pub fn append(&mut self, separator: Item<K, V>, mut other: Leaf<K, V>) {
 		self.items.push(separator);
 		self.items.append(&mut other.items);
 	}
@@ -169,30 +167,32 @@ impl<K, V, const M: usize> Leaf<K, V, M> {
 	}
 
 	#[inline]
-	fn balance(&self) -> Balance {
-		if self.item_count() < M/2 - 1 {
+	pub fn balance(&self) -> Balance {
+		if self.item_count() > M {
+			Balance::Overflow
+		} else if self.item_count() < M/2 - 1 {
 			Balance::Underflow(self.items.is_empty())
 		} else {
 			Balance::Balanced
 		}
 	}
 
-	#[inline]
-	pub fn take(&mut self, offset: usize) -> (Item<K, V>, Balance) {
-		let item = self.items.remove(offset);
-		(item, self.balance())
-	}
-
-	#[inline]
-	pub fn take_last(&mut self) -> (Item<K, V>, Balance) {
-		let item = self.items.pop().unwrap();
-		(item, self.balance())
-	}
-
 	/// It is assumed that the leaf will not overflow.
 	#[inline]
-	pub fn put(&mut self, offset: usize, item: Item<K, V>) {
+	pub fn insert(&mut self, offset: usize, item: Item<K, V>) {
 		self.items.insert(offset, item)
+	}
+
+	/// Remove the item at the given offset.
+	/// Return the new balance of the leaf.
+	#[inline]
+	pub fn remove(&mut self, offset: usize) -> Item<K, V> {
+		self.items.remove(offset)
+	}
+
+	#[inline]
+	pub fn remove_last(&mut self) -> Item<K, V> {
+		self.items.pop().unwrap()
 	}
 
 	/// Write the label of the leaf in the DOT language.
@@ -216,6 +216,7 @@ impl<K, V, const M: usize> Leaf<K, V, M> {
 
 		if min.is_some() || max.is_some() { // not root
 			match self.balance() {
+				Balance::Overflow => panic!("leaf is overflowing"),
 				Balance::Underflow(_) => panic!("leaf is underflowing"),
 				_ => ()
 			}
