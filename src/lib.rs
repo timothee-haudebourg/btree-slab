@@ -1,6 +1,8 @@
 #![feature(min_const_generics)]
 #![feature(move_ref_pattern)]
 #![feature(is_sorted)]
+#![feature(maybe_uninit_ref)]
+use std::mem::MaybeUninit;
 use slab::Slab;
 use staticvec::StaticVec;
 
@@ -55,30 +57,10 @@ pub trait BTreeExt<K, V> {
 	fn remove_from(&mut self, node_id: usize, key: &K) -> Option<(V, ItemAddr)> where K: Ord;
 
 	// /// Update a value in the given node `node_id`.
-	// fn update_in<T, F>(&mut self, key: K, action: F, id: usize) -> (T, Balance) where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T);
+	fn update_in<T, F>(&mut self, id: usize, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T);
 
 	/// Take the right-most leaf value in the given node.
 	fn remove_rightmost_leaf_of(&mut self, node_id: usize) -> (Item<K, V>, usize);
-
-	/// Try to rotate left the node `node_id` to benefits the child number `deficient_child_index`.
-	///
-	/// Returns true if the rotation succeeded, of false if the target child has no right sibling,
-	/// or if this sibling would underflow.
-	fn try_rotate_left(&mut self, node_id: usize, deficient_child_index: usize) -> bool;
-
-	/// Try to rotate right the node `node_id` to benefits the child number `deficient_child_index`.
-	///
-	/// Returns true if the rotation succeeded, of false if the target child has no left sibling,
-	/// or if this sibling would underflow.
-	fn try_rotate_right(&mut self, node_id: usize, deficient_child_index: usize) -> bool;
-
-	/// Merge the `deficient_child_index` child of `node_id` with its left or right sibling.
-	///
-	/// It is assumed that both siblings of the child `deficient_child_index` can be used for
-	/// merging: the resulting merged node should not overflow.
-	///
-	/// Returns the balance of `node_id` after the merge (it may underflow).
-	fn merge(&mut self, node_id: usize, deficient_child_index: usize) -> Balance;
 
 	/// Allocate a free identifier for the given node.
 	fn allocate_node(&mut self, node: Node<K, V>) -> usize;
@@ -163,7 +145,7 @@ impl<K, V> BTreeMap<K, V> {
 				old_value
 			},
 			None => {
-				let new_root = Node::leaf(None, Item { key, value });
+				let new_root = Node::leaf(None, Item::new(key, value));
 				self.root = Some(self.allocate_node(new_root));
 				self.len += 1;
 				None
@@ -171,71 +153,18 @@ impl<K, V> BTreeMap<K, V> {
 		}
 	}
 
-	// /// Insert an item at the given address.
-	// /// Return the address of the inserted item in the tree
-	// /// (it may differ from the input address if the tree is rebalanced).
-	// ///
-	// /// ## Correctness
-	// /// It is assumed that it is btree-correct to insert the given item at the given address.
-	// fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr {
-	// 	match self.node_mut(addr.id).insert(addr.offset, item, opt_right_id) {
-	// 		Balance::Balanced => {
-	// 			addr
-	// 		},
-	// 		Balance::Overflow => {
-	// 			match self.node_mut(addr.id).split() {
-	// 				Ok((left_node_len, median, right_node)) => {
-	// 					let right_id = self.allocate_node(right_node);
-	//
-	// 					let new_addr = if addr.offset == left_node_len {
-	// 						// item is median.
-	// 						None // we don't know the median address yet.
-	// 					} else if addr.offset > left_node_len {
-	// 						// item is moved on right_node.
-	// 						Some(ItemAddr {
-	// 							id: right_id,
-	// 							offset: addr.offset - left_node_len - 1
-	// 						})
-	// 					} else {
-	// 						// item hasn't moved.
-	// 						Some(addr)
-	// 					};
-	//
-	// 					let median_addr = match self.node(addr.id).parent() {
-	// 						Some(parent_id) => {
-	// 							let offset = self.node(parent_id).child_index(addr.id).unwrap();
-	// 							let addr = ItemAddr {
-	// 								id: parent_id,
-	// 								offset
-	// 							};
-	// 							self.insert_at(addr, item, Some(right_id))
-	// 						},
-	// 						None => {
-	// 							let left_id = addr.id;
-	// 							let new_root = Node::binary(None, left_id, median, right_id);
-	// 							let id = self.allocate_node(new_root);
-	//
-	// 							self.root = Some(id);
-	// 							self.nodes[left_id].set_parent(self.root);
-	// 							self.nodes[right_id].set_parent(self.root);
-	//
-	// 							ItemAddr {
-	// 								id,
-	// 								offset: 0
-	// 							}
-	// 						}
-	// 					};
-	//
-	// 					match new_addr {
-	// 						Some(addr) => addr,
-	// 						None => median_addr
-	// 					}
-	// 				}
-	// 			}
-	// 		},
-	// 		Balance::Underflow(_) => unreachable!()
-	// 	}
-	// }
+	/// Insert an item at the given address.
+	/// Return the address of the inserted item in the tree
+	/// (it may differ from the input address if the tree is rebalanced).
+	///
+	/// ## Correctness
+	/// It is assumed that it is btree-correct to insert the given item at the given address.
+	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr {
+		self.node_mut(addr.id).insert(addr.offset, item, opt_right_id);
+		let new_addr = self.rebalance(addr.id, addr);
+		self.len += 1;
+		new_addr
+	}
 
 	fn before(&self, id: usize, offset: usize) -> Option<ItemAddr> {
 		panic!("TODO")
@@ -278,53 +207,172 @@ impl<K, V> BTreeMap<K, V> {
 		}
 	}
 
-	// /// General-purpose update function.
-	// ///
-	// /// This can be used to insert, compare, replace or remove the value associated to the given
-	// /// `key` in the tree.
-	// /// The action to perform is specified by the `action` function.
-	// /// This function is called once with:
-	// ///  - `Some(value)` when `value` is aready associated to `key` in the tree or
-	// ///  - `None` when the `key` is not associated to any value in the tree.
-	// /// The `action` function must return a pair (`new_value`, `result`) where
-	// /// `new_value` is the new value to be associated to `key`
-	// /// (if it is `None` any previous binding is removed) and
-	// /// `result` is the value returned by the entire `update` function call.
-	// #[inline]
-	// pub fn update<T, F>(&mut self, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
-	// 	match self.root {
-	// 		Some(id) => {
-	// 			let (result, balance) = self.update_in(key, action, id);
-	//
-	// 			match balance {
-	// 				Balance::Underflow(true) => { // The root is empty.
-	// 					self.root = self.node(id).child_id_opt(0);
-	//
-	// 					// update root's parent
-	// 					if let Some(root_id) = self.root {
-	// 						self.node_mut(root_id).set_parent(None)
-	// 					}
-	//
-	// 					self.release_node(id);
-	// 				},
-	// 				_ => ()
-	// 			};
-	//
-	// 			result
-	// 		},
-	// 		None => {
-	// 			let (to_insert, result) = action(None);
-	//
-	// 			if let Some(value) = to_insert {
-	// 				let new_root = Node::leaf(None, Item { key, value });
-	// 				self.root = Some(self.allocate_node(new_root));
-	// 				self.len += 1;
-	// 			}
-	//
-	// 			result
-	// 		}
-	// 	}
-	// }
+	/// General-purpose update function.
+	///
+	/// This can be used to insert, compare, replace or remove the value associated to the given
+	/// `key` in the tree.
+	/// The action to perform is specified by the `action` function.
+	/// This function is called once with:
+	///  - `Some(value)` when `value` is aready associated to `key` in the tree or
+	///  - `None` when the `key` is not associated to any value in the tree.
+	/// The `action` function must return a pair (`new_value`, `result`) where
+	/// `new_value` is the new value to be associated to `key`
+	/// (if it is `None` any previous binding is removed) and
+	/// `result` is the value returned by the entire `update` function call.
+	#[inline]
+	pub fn update<T, F>(&mut self, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
+		match self.root {
+			Some(id) => self.update_in(id, key, action),
+			None => {
+				let (to_insert, result) = action(None);
+
+				if let Some(value) = to_insert {
+					let new_root = Node::leaf(None, Item::new(key, value));
+					self.root = Some(self.allocate_node(new_root));
+					self.len += 1;
+				}
+
+				result
+			}
+		}
+	}
+
+	/// Try to rotate left the node `id` to benefits the child number `deficient_child_index`.
+	///
+	/// Returns true if the rotation succeeded, of false if the target child has no right sibling,
+	/// or if this sibling would underflow.
+	#[inline]
+	fn try_rotate_left(&mut self, id: usize, deficient_child_index: usize, addr: &mut ItemAddr) -> bool {
+		let pivot_offset = deficient_child_index;
+		let right_sibling_index = deficient_child_index + 1;
+		let (right_sibling_id, deficient_child_id) = {
+			let node = &self.nodes[id];
+
+			if right_sibling_index >= node.child_count() {
+				return false // no right sibling
+			}
+
+			(node.child_id(right_sibling_index), node.child_id(deficient_child_index))
+		};
+
+		match self.nodes[right_sibling_id].pop_left() {
+			Ok((mut value, opt_child_id)) => {
+				std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(pivot_offset));
+				let left_offset = self.nodes[deficient_child_id].push_right(value, opt_child_id);
+
+				// update opt_child's parent
+				if let Some(child_id) = opt_child_id {
+					self.nodes[child_id].set_parent(Some(deficient_child_id))
+				}
+
+				// update address.
+				if addr.id == right_sibling_id { // addressed item is in the right node.
+					if addr.offset == 0 {
+						// addressed item is moving to pivot.
+						addr.id = id;
+						addr.offset = pivot_offset;
+					} else {
+						// addressed item stays on right.
+						addr.offset -= 1;
+					}
+				} else if addr.id == id { // addressed item is in the parent node.
+					if addr.offset == pivot_offset {
+						// addressed item is the pivot, moving to the left (deficient) node.
+						addr.id = deficient_child_id;
+						addr.offset = left_offset;
+					}
+				}
+
+				true // rotation succeeded
+			},
+			Err(WouldUnderflow) => false // the right sibling would underflow.
+		}
+	}
+
+	/// Try to rotate right the node `id` to benefits the child number `deficient_child_index`.
+	///
+	/// Returns true if the rotation succeeded, of false if the target child has no left sibling,
+	/// or if this sibling would underflow.
+	#[inline]
+	fn try_rotate_right(&mut self, id: usize, deficient_child_index: usize, addr: &mut ItemAddr) -> bool {
+		if deficient_child_index > 0 {
+			let left_sibling_index = deficient_child_index - 1;
+			let pivot_offset = left_sibling_index;
+			let (left_sibling_id, deficient_child_id) = {
+				let node = &self.nodes[id];
+				(node.child_id(left_sibling_index), node.child_id(deficient_child_index))
+			};
+			match self.nodes[left_sibling_id].pop_right() {
+				Ok((left_offset, mut value, opt_child_id)) => {
+					std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(pivot_offset));
+					self.nodes[deficient_child_id].push_left(value, opt_child_id);
+
+					// update opt_child's parent
+					if let Some(child_id) = opt_child_id {
+						self.nodes[child_id].set_parent(Some(deficient_child_id))
+					}
+
+					// update address.
+					if addr.id == deficient_child_id { // addressed item is in the right (deficient) node.
+						addr.offset += 1;
+					} else if addr.id == left_sibling_id { // addressed item is in the left node.
+						if addr.offset == left_offset {
+							// addressed item is moving to pivot.
+							addr.id = id;
+							addr.offset = pivot_offset;
+						}
+					} else if addr.id == id { // addressed item is in the parent node.
+						if addr.offset == pivot_offset {
+							// addressed item is the pivot, moving to the left (deficient) node.
+							addr.id = deficient_child_id;
+							addr.offset = 0;
+						}
+					}
+
+					true // rotation succeeded
+				},
+				Err(WouldUnderflow) => false // the left sibling would underflow.
+			}
+		} else {
+			false // no left sibling.
+		}
+	}
+
+	/// Merge the child `deficient_child_index` in node `id` with one of its direct sibling.
+	#[inline]
+	fn merge(&mut self, id: usize, deficient_child_index: usize, mut addr: ItemAddr) -> (Balance, ItemAddr) {
+		let (offset, left_id, right_id, separator, balance) = if deficient_child_index > 0 {
+			// merge with left sibling
+			self.nodes[id].merge(deficient_child_index-1, deficient_child_index)
+		} else {
+			// merge with right sibling
+			self.nodes[id].merge(deficient_child_index, deficient_child_index+1)
+		};
+
+		// update children's parent.
+		let right_node = self.release_node(right_id);
+		for right_child_id in right_node.children() {
+			self.nodes[right_child_id].set_parent(Some(left_id));
+		}
+
+		// actually merge.
+		let left_offset = self.nodes[left_id].append(separator, right_node);
+
+		// update addr.
+		if addr.id == id {
+			if addr.offset == offset {
+				addr.id = left_id;
+				addr.offset = left_offset;
+			} else if addr.offset > offset {
+				addr.offset -= 1;
+			}
+		} else if addr.id == right_id {
+			addr.id = left_id;
+			addr.offset += left_offset + 1;
+		}
+
+		(balance, addr)
+	}
 
 	/// Write the tree in the DOT graph descrption language.
 	///
@@ -433,6 +481,10 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 		loop {
 			match self.node_mut(id).insert_by_key(key, value) {
 				Ok((offset, old_value)) => {
+					if old_value.is_none() {
+						self.len += 1;
+					}
+
 					let addr = self.rebalance(id, ItemAddr { id, offset });
 					return (old_value, addr)
 				},
@@ -445,9 +497,64 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 		}
 	}
 
+	/// Remove the item matching the given key from the given internal node `id`.
+	#[inline]
+	fn remove_from(&mut self, mut id: usize, key: &K) -> Option<(V, ItemAddr)> where K: Ord {
+		loop {
+			match self.nodes[id].offset_of(key) {
+				Ok(offset) => {
+					let (item, addr) = self.remove_at(ItemAddr { id, offset });
+					return Some((item.into_value(), addr))
+				},
+				Err((_, Some(child_id))) => {
+					id = child_id;
+				},
+				Err((_, None)) => return None
+			}
+		}
+	}
+
+	fn update_in<T, F>(&mut self, mut id: usize, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
+		loop {
+			match self.nodes[id].offset_of(&key) {
+				Ok(offset) => unsafe {
+					let mut value = MaybeUninit::uninit();
+					let item = &mut self.nodes[id].item_at_mut(offset);
+					std::mem::swap(&mut value, item.maybe_uninit_value_mut());
+					let (opt_new_value, result) = action(Some(value.assume_init()));
+					match opt_new_value {
+						Some(new_value) => {
+							let mut new_value = MaybeUninit::new(new_value);
+							std::mem::swap(&mut new_value, item.maybe_uninit_value_mut());
+						},
+						None => {
+							let (item, _) = self.remove_at(ItemAddr { id, offset });
+							// item's value is NOT initialized here.
+							// It must not be dropped.
+							item.forget_value()
+						}
+					}
+
+					return result
+				},
+				Err((offset, None)) => {
+					let (opt_new_value, result) = action(None);
+					if let Some(new_value) = opt_new_value {
+						self.insert_at(ItemAddr { id, offset }, Item::new(key, new_value), None);
+					}
+
+					return result
+				},
+				Err((_, Some(child_id))) => {
+					id = child_id;
+				}
+			}
+		}
+	}
+
 	/// Rebalance the given node.
 	#[inline]
-	fn rebalance(&mut self, mut id: usize, addr: ItemAddr) -> ItemAddr {
+	fn rebalance(&mut self, mut id: usize, mut addr: ItemAddr) -> ItemAddr {
 		let mut balance = self.node(id).balance();
 
 		loop {
@@ -456,13 +563,27 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 					break
 				},
 				Balance::Overflow => {
-					let (left_node_len, median, right_node) = self.node_mut(id).split();
+					let (median_offset, median, right_node) = self.node_mut(id).split();
 					let right_id = self.allocate_node(right_node);
 
 					match self.node(id).parent() {
 						Some(parent_id) => {
-							let index = self.node(parent_id).child_index(id).unwrap();
-							self.node_mut(id).insert(index, median, Some(right_id));
+							let parent = self.node_mut(parent_id);
+							let offset = parent.child_index(id).unwrap();
+							parent.insert(offset, median, Some(right_id));
+
+							// new address.
+							if addr.offset == median_offset {
+								addr = ItemAddr { id: parent_id, offset }
+							} else if addr.offset > median_offset {
+								addr = ItemAddr {
+									id: right_id,
+									offset: addr.offset - median_offset - 1
+								}
+							}
+
+							id = parent_id;
+							balance = parent.balance()
 						},
 						None => {
 							let left_id = id;
@@ -472,8 +593,20 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 							self.root = Some(id);
 							self.nodes[left_id].set_parent(self.root);
 							self.nodes[right_id].set_parent(self.root);
+
+							// new address.
+							if addr.offset == median_offset {
+								addr = ItemAddr { id, offset: 0 }
+							} else if addr.offset > median_offset {
+								addr = ItemAddr {
+									id: right_id,
+									offset: addr.offset - median_offset - 1
+								}
+							}
+
+							break
 						}
-					}
+					};
 				},
 				Balance::Underflow(is_empty) => {
 					match self.node(id).parent() {
@@ -481,10 +614,14 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 							let index = self.node(parent_id).child_index(id).unwrap();
 							// An underflow append in the child node.
 							// First we try to rebalance the tree by rotation.
-							if !self.try_rotate_left(parent_id, index) && !self.try_rotate_right(parent_id, index) {
+							if self.try_rotate_left(parent_id, index, &mut addr) || self.try_rotate_right(parent_id, index, &mut addr) {
+								break
+							} else {
 								// Rotation didn't work.
 								// This means that all existing child sibling have enough few elements to be merged with this child.
-								balance = self.merge(parent_id, index);
+								let (new_balance, new_addr) = self.merge(parent_id, index, addr);
+								balance = new_balance;
+								addr = new_addr;
 								// The `merge` function returns the current balance of the parent node,
 								// since it may underflow after the merging operation.
 								id = parent_id
@@ -502,6 +639,8 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 
 								self.release_node(id);
 							}
+
+							break
 						}
 					}
 				}
@@ -510,105 +649,6 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 
 		addr
 	}
-
-	/// Remove the item matching the given key from the given internal node `id`.
-	#[inline]
-	fn remove_from(&mut self, mut id: usize, key: &K) -> Option<(V, ItemAddr)> where K: Ord {
-		loop {
-			match self.nodes[id].offset_of(key) {
-				Ok(offset) => {
-					let (item, addr) = self.remove_at(ItemAddr { id, offset });
-					return Some((item.value, addr))
-				},
-				Err(Some(child_id)) => {
-					id = child_id;
-				},
-				Err(None) => return None
-			}
-		}
-	}
-
-	// fn update_in<T, F>(&mut self, key: K, action: F, id: usize) -> (T, Balance) where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
-	// 	match self.nodes[id].offset_of(&key) {
-	// 		Ok(offset) => {
-	// 			match self.nodes[id].remove(offset) {
-	// 				Ok((mut item, balance)) => { // update in leaf.
-	// 					let (to_insert, result) = action(Some(item.value));
-	// 					match to_insert {
-	// 						Some(value) => {
-	// 							item.value = value;
-	// 							self.nodes[id].insert(offset, item, None);
-	// 							(result, Balance::Balanced)
-	// 						},
-	// 						None => {
-	// 							self.len -= 1;
-	// 							(result, balance)
-	// 						}
-	// 					}
-	// 				},
-	// 				Err((left_child_id, mut item, right_child_id)) => { // update in internal node.
-	// 					let (to_insert, result) = action(Some(item.value));
-	// 					match to_insert {
-	// 						Some(value) => {
-	// 							item.value = value;
-	// 							self.nodes[id].insert(offset, item, Some(right_child_id));
-	// 							(result, Balance::Balanced)
-	// 						},
-	// 						None => {
-	// 							let left_child_index = offset;
-	// 							let (separator, left_child_balance) = self.remove_rightmost_leaf_of(left_child_id);
-	// 							self.nodes[id].insert(offset, separator, Some(right_child_id));
-	// 							let balance = self.rebalance_child(id, left_child_index, left_child_balance);
-	// 							self.len -= 1;
-	// 							(result, balance)
-	// 						}
-	// 					}
-	// 				}
-	// 			}
-	// 		},
-	// 		Err(Some((child_index, child_id))) => { // update in child
-	// 			// split the child if necessary.
-	// 			let child = &mut self.nodes[child_id];
-	// 			let child_id = match child.split() {
-	// 				Ok((median, right_node)) => {
-	// 					let insert_right = key > median.key;
-	// 					let right_id = self.allocate_node(right_node);
-	// 					match &mut self.nodes[id] {
-	// 						Node::Internal(node) => {
-	// 							node.insert(child_index, median, right_id)
-	// 						},
-	// 						_ => unreachable!()
-	// 					}
-	//
-	// 					if insert_right {
-	// 						right_id
-	// 					} else {
-	// 						child_id
-	// 					}
-	// 				},
-	// 				_ => child_id
-	// 			};
-	//
-	// 			let (result, child_balance) = self.update_in(key, action, child_id);
-	// 			let balance = self.rebalance_child(id, child_index, child_balance);
-	// 			(result, balance)
-	// 		},
-	// 		Err(None) => { // update nowhere. We are in a leaf.
-	// 			let (to_insert, result) = action(None);
-	//
-	// 			if let Some(value) = to_insert {
-	// 				match self.nodes[id].insert_by_key(key, value) {
-	// 					Ok((_, None)) => (),
-	// 					_ => unreachable!()
-	// 				}
-	// 			}
-	//
-	// 			self.len += 1;
-	//
-	// 			(result, Balance::Balanced)
-	// 		}
-	// 	}
-	// }
 
 	/// Take the right-most leaf value in the given node.
 	///
@@ -624,95 +664,6 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 				}
 			}
 		}
-	}
-
-	/// Try to rotate left the node `id` to benefits the child number `deficient_child_index`.
-	///
-	/// Returns true if the rotation succeeded, of false if the target child has no right sibling,
-	/// or if this sibling would underflow.
-	#[inline]
-	fn try_rotate_left(&mut self, id: usize, deficient_child_index: usize) -> bool {
-		let pivot_index = deficient_child_index;
-		let right_sibling_index = deficient_child_index + 1;
-		let (right_sibling_id, deficient_child_id) = {
-			let node = &self.nodes[id];
-
-			if right_sibling_index >= node.child_count() {
-				return false // no right sibling
-			}
-
-			(node.child_id(right_sibling_index), node.child_id(deficient_child_index))
-		};
-
-		match self.nodes[right_sibling_id].pop_left() {
-			Ok((mut value, opt_child_id)) => {
-				std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(pivot_index));
-				self.nodes[deficient_child_id].push_right(value, opt_child_id);
-
-				// update opt_child's parent
-				if let Some(child_id) = opt_child_id {
-					self.nodes[child_id].set_parent(Some(deficient_child_id))
-				}
-
-				true // rotation succeeded
-			},
-			Err(WouldUnderflow) => false // the right sibling would underflow.
-		}
-	}
-
-	/// Try to rotate right the node `id` to benefits the child number `deficient_child_index`.
-	///
-	/// Returns true if the rotation succeeded, of false if the target child has no left sibling,
-	/// or if this sibling would underflow.
-	#[inline]
-	fn try_rotate_right(&mut self, id: usize, deficient_child_index: usize) -> bool {
-		if deficient_child_index > 0 {
-			let left_sibling_index = deficient_child_index - 1;
-			let pivot_index = left_sibling_index;
-			let (left_sibling_id, deficient_child_id) = {
-				let node = &self.nodes[id];
-				(node.child_id(left_sibling_index), node.child_id(deficient_child_index))
-			};
-			match self.nodes[left_sibling_id].pop_right() {
-				Ok((mut value, opt_child_id)) => {
-					std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(pivot_index));
-					self.nodes[deficient_child_id].push_left(value, opt_child_id);
-
-					// update opt_child's parent
-					if let Some(child_id) = opt_child_id {
-						self.nodes[child_id].set_parent(Some(deficient_child_id))
-					}
-
-					true // rotation succeeded
-				},
-				Err(WouldUnderflow) => false // the left sibling would underflow.
-			}
-		} else {
-			false // no left sibling.
-		}
-	}
-
-	/// Merge the child `deficient_child_index` in node `id` with one of its direct sibling.
-	#[inline]
-	fn merge(&mut self, id: usize, deficient_child_index: usize) -> Balance {
-		let (left_id, right_id, separator, balancing) = if deficient_child_index > 0 {
-			// merge with left sibling
-			self.nodes[id].merge(deficient_child_index-1, deficient_child_index)
-		} else {
-			// merge with right sibling
-			self.nodes[id].merge(deficient_child_index, deficient_child_index+1)
-		};
-
-		// update children's parent.
-		let right_node = self.release_node(right_id);
-		for right_child_id in right_node.children() {
-			self.nodes[right_child_id].set_parent(Some(left_id));
-		}
-
-		// actually merge.
-		self.nodes[left_id].append(separator, right_node);
-
-		balancing
 	}
 
 	/// Allocate a free node.

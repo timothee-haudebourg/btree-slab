@@ -21,25 +21,25 @@ pub struct Branch<K, V> {
 
 impl<K: PartialEq, V> PartialEq<K> for Branch<K, V> {
 	fn eq(&self, key: &K) -> bool {
-		self.item.key.eq(key)
+		self.item.key().eq(key)
 	}
 }
 
 impl<K: Ord + PartialEq, V> PartialOrd<K> for Branch<K, V> {
 	fn partial_cmp(&self, key: &K) -> Option<Ordering> {
-		Some(self.item.key.cmp(key))
+		Some(self.item.key().cmp(key))
 	}
 }
 
 impl<K: PartialEq, V> PartialEq for Branch<K, V> {
 	fn eq(&self, other: &Branch<K, V>) -> bool {
-		self.item.key.eq(&other.item.key)
+		self.item.key().eq(other.item.key())
 	}
 }
 
 impl<K: Ord + PartialEq, V> PartialOrd for Branch<K, V> {
 	fn partial_cmp(&self, other: &Branch<K, V>) -> Option<Ordering> {
-		Some(self.item.key.cmp(&other.item.key))
+		Some(self.item.key().cmp(other.item.key()))
 	}
 }
 
@@ -117,7 +117,7 @@ impl<K, V> Internal<K, V> {
 		} else {
 			for i in 0..self.other_children.len() {
 				if self.other_children[i].child == id {
-					return Some(i)
+					return Some(i+1)
 				}
 			}
 
@@ -146,13 +146,13 @@ impl<K, V> Internal<K, V> {
 	#[inline]
 	pub fn separators(&self, index: usize) -> (Option<&K>, Option<&K>) {
 		let min = if index > 0 {
-			Some(&self.other_children[index - 1].item.key)
+			Some(self.other_children[index - 1].item.key())
 		} else {
 			None
 		};
 
 		let max = if index < self.other_children.len() {
-			Some(&self.other_children[index].item.key)
+			Some(self.other_children[index].item.key())
 		} else {
 			None
 		};
@@ -165,8 +165,8 @@ impl<K, V> Internal<K, V> {
 		match binary_search_min(&self.other_children, key) {
 			Some(offset) => {
 				let b = &self.other_children[offset];
-				if &b.item.key == key {
-					Ok(&b.item.value)
+				if b.item.key() == key {
+					Ok(b.item.value())
 				} else {
 					Err(b.child)
 				}
@@ -180,8 +180,8 @@ impl<K, V> Internal<K, V> {
 		match binary_search_min(&self.other_children, key) {
 			Some(offset) => {
 				let b = &mut self.other_children[offset];
-				if &b.item.key == key {
-					Ok(&mut b.item.value)
+				if b.item.key() == key {
+					Ok(b.item.value_mut())
 				} else {
 					Err(b.child)
 				}
@@ -195,17 +195,17 @@ impl<K, V> Internal<K, V> {
 	/// If the key matches no item in this node,
 	/// this funtion returns the index and id of the child that may match the key.
 	#[inline]
-	pub fn offset_of(&self, key: &K) -> Result<usize, usize> where K: Ord {
+	pub fn offset_of(&self, key: &K) -> Result<usize, (usize, usize)> where K: Ord {
 		match binary_search_min(&self.other_children, key) {
 			Some(offset) => {
-				if &self.other_children[offset].item.key == key {
+				if self.other_children[offset].item.key() == key {
 					Ok(offset)
 				} else {
 					let id = self.other_children[offset].child;
-					Err(id)
+					Err((offset+1, id))
 				}
 			},
-			None => Err(self.first_child)
+			None => Err((0, self.first_child))
 		}
 	}
 
@@ -237,8 +237,8 @@ impl<K, V> Internal<K, V> {
 	pub fn insert_by_key(&mut self, key: K, mut value: V) -> Result<(usize, V), (K, V, usize, usize)> where K: Ord {
 		match binary_search_min(&self.other_children, &key) {
 			Some(i) => {
-				if self.other_children[i].item.key == key {
-					std::mem::swap(&mut value, &mut self.other_children[i].item.value);
+				if self.other_children[i].item.key() == &key {
+					std::mem::swap(&mut value, self.other_children[i].item.value_mut());
 					Ok((i, value))
 				} else {
 					Err((key, value, i+1, self.other_children[i].child))
@@ -255,7 +255,7 @@ impl<K, V> Internal<K, V> {
 	// pub fn key_offset(&self, key: &K) -> Result<usize, (usize, usize)> {
 	// 	match binary_search_min(&self.other_children, key) {
 	// 		Some(i) => {
-	// 			if &self.other_children[i].item.key == key {
+	// 			if self.other_children[i].item.key() == key {
 	// 				Ok(i)
 	// 			} else {
 	// 				Err((i+1, self.other_children[i].child))
@@ -296,7 +296,7 @@ impl<K, V> Internal<K, V> {
 	#[inline]
 	pub fn split(&mut self) -> (usize, Item<K, V>, Internal<K, V>) {
 		// Index of the median-key item in `other_children`.
-		let median_i = (M - 1) / 2; // Since M is at least 3, `median_i` is at least 1.
+		let median_i = self.other_children.len() / 2; // Since M is at least 3, `median_i` is at least 1.
 
 		let right_other_children = self.other_children.drain(median_i+1..);
 		let median = self.other_children.pop().unwrap();
@@ -317,7 +317,7 @@ impl<K, V> Internal<K, V> {
 	/// the item removed from this node to be merged with the merged children and
 	/// the balance status of this node after the merging operation.
 	#[inline]
-	pub fn merge(&mut self, left_index: usize, right_index: usize) -> (usize, usize, Item<K, V>, Balance) {
+	pub fn merge(&mut self, left_index: usize, right_index: usize) -> (usize, usize, usize, Item<K, V>, Balance) {
 		let left_id = self.child_id(left_index);
 		let right_id = self.child_id(right_index);
 
@@ -332,7 +332,7 @@ impl<K, V> Internal<K, V> {
 			Balance::Underflow(item_count == 0)
 		};
 
-		(left_id, right_id, item, balancing)
+		(left_index, left_id, right_id, item, balancing)
 	}
 
 	#[inline]
@@ -357,31 +357,36 @@ impl<K, V> Internal<K, V> {
 	}
 
 	#[inline]
-	pub fn push_right(&mut self, item: Item<K, V>, child_id: usize) {
+	pub fn push_right(&mut self, item: Item<K, V>, child_id: usize) -> usize {
+		let offset = self.other_children.len();
 		self.other_children.push(Branch {
 			item,
 			child: child_id
-		})
+		});
+		offset
 	}
 
 	#[inline]
-	pub fn pop_right(&mut self) -> Result<(Item<K, V>, usize), WouldUnderflow> {
+	pub fn pop_right(&mut self) -> Result<(usize, Item<K, V>, usize), WouldUnderflow> {
 		if self.item_count() < M/2 {
 			Err(WouldUnderflow)
 		} else {
+			let offset = self.other_children.len();
 			let last = self.other_children.pop().unwrap();
-			Ok((last.item, last.child))
+			Ok((offset, last.item, last.child))
 		}
 	}
 
 	#[inline]
-	pub fn append(&mut self, separator: Item<K, V>, mut other: Internal<K, V>) {
+	pub fn append(&mut self, separator: Item<K, V>, mut other: Internal<K, V>) -> usize {
+		let offset = self.other_children.len();
 		self.other_children.push(Branch {
 			item: separator,
 			child: other.first_child
 		});
 
 		self.other_children.append(&mut other.other_children);
+		offset
 	}
 
 	/// Write the label of the internal node in the DOT format.
@@ -393,7 +398,7 @@ impl<K, V> Internal<K, V> {
 		write!(f, "<c0> |")?;
 		let mut i = 1;
 		for branch in &self.other_children {
-			write!(f, "{{{}|<c{}> {}}} |", branch.item.key, i, branch.item.value)?;
+			write!(f, "{{{}|<c{}> {}}} |", branch.item.key(), i, branch.item.value())?;
 			i += 1;
 		}
 
@@ -426,7 +431,7 @@ impl<K, V> Internal<K, V> {
 
 		if let Some(min) = min {
 			if let Some(b) = self.other_children.first() {
-				if min >= &b.item.key {
+				if min >= b.item.key() {
 					panic!("internal node item key is greater than right separator")
 				}
 			}
@@ -434,7 +439,7 @@ impl<K, V> Internal<K, V> {
 
 		if let Some(max) = max {
 			if let Some(b) = self.other_children.last() {
-				if max <= &b.item.key {
+				if max <= b.item.key() {
 					panic!("internal node item key is less than left separator")
 				}
 			}

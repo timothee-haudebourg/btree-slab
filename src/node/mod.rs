@@ -121,15 +121,15 @@ impl<K, V> Node<K, V> {
 	/// this funtion returns the index and id of the child that may match the key,
 	/// or `Err(None)` if it is a leaf.
 	#[inline]
-	pub fn offset_of(&self, key: &K) -> Result<usize, Option<usize>> where K: Ord {
+	pub fn offset_of(&self, key: &K) -> Result<usize, (usize, Option<usize>)> where K: Ord {
 		match self {
 			Node::Internal(node) => match node.offset_of(key) {
 				Ok(i) => Ok(i),
-				Err(e) => Err(Some(e))
+				Err((offset, child_id)) => Err((offset, Some(child_id)))
 			},
 			Node::Leaf(leaf) => match leaf.offset_of(key) {
-				Some(i) => Ok(i),
-				None =>  Err(None)
+				Ok(i) => Ok(i),
+				Err(offset) =>  Err((offset, None))
 			}
 		}
 	}
@@ -182,15 +182,16 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn merge(&mut self, left_index: usize, right_index: usize) -> (usize, usize, Item<K, V>, Balance) {
+	pub fn merge(&mut self, left_index: usize, right_index: usize) -> (usize, usize, usize, Item<K, V>, Balance) {
 		match self {
 			Node::Internal(node) => node.merge(left_index, right_index),
 			_ => panic!("only internal nodes can merge children")
 		}
 	}
 
+	/// Return the offset of the separator.
 	#[inline]
-	pub fn append(&mut self, separator: Item<K, V>, other: Node<K, V>) {
+	pub fn append(&mut self, separator: Item<K, V>, other: Node<K, V>) -> usize {
 		match (self, other) {
 			(Node::Internal(node), Node::Internal(other)) => node.append(separator, other),
 			(Node::Leaf(leaf), Node::Leaf(other)) => leaf.append(separator, other),
@@ -218,7 +219,7 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn push_right(&mut self, item: Item<K, V>, opt_child_id: Option<usize>) {
+	pub fn push_right(&mut self, item: Item<K, V>, opt_child_id: Option<usize>) -> usize {
 		match self {
 			Node::Internal(node) => node.push_right(item, opt_child_id.unwrap()),
 			Node::Leaf(leaf) => leaf.push_right(item)
@@ -226,13 +227,16 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn pop_right(&mut self) -> Result<(Item<K, V>, Option<usize>), WouldUnderflow> {
+	pub fn pop_right(&mut self) -> Result<(usize, Item<K, V>, Option<usize>), WouldUnderflow> {
 		match self {
 			Node::Internal(node) => {
-				let (item, child_id) = node.pop_right()?;
-				Ok((item, Some(child_id)))
+				let (offset, item, child_id) = node.pop_right()?;
+				Ok((offset, item, Some(child_id)))
 			},
-			Node::Leaf(leaf) => Ok((leaf.pop_right()?, None))
+			Node::Leaf(leaf) => {
+				let (offset, item) = leaf.pop_right()?;
+				Ok((offset, item, None))
+			}
 		}
 	}
 

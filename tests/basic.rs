@@ -14,7 +14,7 @@ const SEED: &'static [u8; 16] = b"testseedtestseed";
 
 #[test]
 pub fn insert() {
-	let mut btree: BTreeMap<usize, usize, 6> = BTreeMap::new();
+	let mut btree: BTreeMap<usize, usize> = BTreeMap::new();
 
 	for (key, value) in &ITEMS {
 		if let Some(_) = btree.insert(*key, *value) {
@@ -28,7 +28,7 @@ pub fn insert() {
 
 #[test]
 pub fn remove() {
-	let mut btree: BTreeMap<usize, usize, 6> = BTreeMap::new();
+	let mut btree: BTreeMap<usize, usize> = BTreeMap::new();
 
 	let mut items = ITEMS;
 
@@ -49,7 +49,7 @@ pub fn remove() {
 
 #[test]
 pub fn update() {
-	let mut btree: BTreeMap<usize, usize, 6> = BTreeMap::new();
+	let mut btree: BTreeMap<usize, usize> = BTreeMap::new();
 
 	for (key, value) in &ITEMS {
 		if key % 2 == 0 {

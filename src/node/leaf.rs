@@ -40,8 +40,7 @@ impl<K, V> Leaf<K, V> {
 
 	#[inline]
 	pub fn item_count(&self) -> usize {
-		let mut len = self.items.len();
-		len
+		self.items.len()
 	}
 
 	#[inline]
@@ -54,8 +53,8 @@ impl<K, V> Leaf<K, V> {
 		match binary_search_min(&self.items, key) {
 			Some(i) => {
 				let item = &self.items[i];
-				if &item.key == key {
-					Some(&item.value)
+				if item.key() == key {
+					Some(item.value())
 				} else {
 					None
 				}
@@ -69,8 +68,8 @@ impl<K, V> Leaf<K, V> {
 		match binary_search_min(&self.items, key) {
 			Some(i) => {
 				let item = &mut self.items[i];
-				if &item.key == key {
-					Some(&mut item.value)
+				if item.key() == key {
+					Some(item.value_mut())
 				} else {
 					None
 				}
@@ -81,10 +80,16 @@ impl<K, V> Leaf<K, V> {
 
 	/// Find the offset of the item matching the given key.
 	#[inline]
-	pub fn offset_of(&self, key: &K) -> Option<usize> where K: Ord {
+	pub fn offset_of(&self, key: &K) -> Result<usize, usize> where K: Ord {
 		match binary_search_min(&self.items, key) {
-			Some(i) if &self.items[i].key == key => Some(i),
-			_ => None
+			Some(i) => {
+				if self.items[i].key() == key {
+					Ok(i)
+				} else {
+					Err(i+1)
+				}
+			},
+			None => Err(0)
 		}
 	}
 
@@ -102,16 +107,16 @@ impl<K, V> Leaf<K, V> {
 	pub fn insert_by_key(&mut self, key: K, mut value: V) -> (usize, Option<V>) where K: Ord {
 		match binary_search_min(&self.items, &key) {
 			Some(i) => {
-				if self.items[i].key == key {
-					std::mem::swap(&mut value, &mut self.items[i].value);
+				if self.items[i].key() == &key {
+					std::mem::swap(&mut value, self.items[i].value_mut());
 					(i, Some(value))
 				} else {
-					self.items.insert(i+1, Item { key, value });
+					self.items.insert(i+1, Item::new(key, value));
 					(i+1, None)
 				}
 			},
 			None => {
-				self.items.insert(0, Item { key, value });
+				self.items.insert(0, Item::new(key, value));
 				(0, None)
 			}
 		}
@@ -119,7 +124,9 @@ impl<K, V> Leaf<K, V> {
 
 	#[inline]
 	pub fn split(&mut self) -> (usize, Item<K, V>, Leaf<K, V>) {
-		let median_i = M / 2;
+		assert!(self.is_overflowing());
+
+		let median_i = self.items.len() / 2;
 
 		let right_items = self.items.drain(median_i+1..);
 		let median = self.items.pop().unwrap();
@@ -133,9 +140,11 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[inline]
-	pub fn append(&mut self, separator: Item<K, V>, mut other: Leaf<K, V>) {
+	pub fn append(&mut self, separator: Item<K, V>, mut other: Leaf<K, V>) -> usize {
+		let offset = self.items.len();
 		self.items.push(separator);
 		self.items.append(&mut other.items);
+		offset
 	}
 
 	#[inline]
@@ -153,28 +162,37 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[inline]
-	pub fn push_right(&mut self, item: Item<K, V>) {
-		self.items.push(item)
+	pub fn push_right(&mut self, item: Item<K, V>) -> usize {
+		let offset = self.items.len();
+		self.items.push(item);
+		offset
 	}
 
 	#[inline]
-	pub fn pop_right(&mut self) -> Result<Item<K, V>, WouldUnderflow> {
+	pub fn pop_right(&mut self) -> Result<(usize, Item<K, V>), WouldUnderflow> {
 		if self.item_count() < M/2 {
 			Err(WouldUnderflow)
 		} else {
-			Ok(self.items.pop().unwrap())
+			let offset = self.items.len();
+			let item = self.items.pop().unwrap();
+			Ok((offset, item))
 		}
 	}
 
 	#[inline]
 	pub fn balance(&self) -> Balance {
-		if self.item_count() > M {
+		if self.is_overflowing() {
 			Balance::Overflow
 		} else if self.item_count() < M/2 - 1 {
 			Balance::Underflow(self.items.is_empty())
 		} else {
 			Balance::Balanced
 		}
+	}
+
+	#[inline]
+	pub fn is_overflowing(&self) -> bool {
+		self.item_count() > M
 	}
 
 	/// It is assumed that the leaf will not overflow.
@@ -202,7 +220,7 @@ impl<K, V> Leaf<K, V> {
 	#[inline]
 	pub fn dot_write_label<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
 		for item in &self.items {
-			write!(f, "{{{}|{}}}|", item.key, item.value)?;
+			write!(f, "{{{}|{}}}|", item.key(), item.value())?;
 		}
 
 		Ok(())
@@ -228,7 +246,7 @@ impl<K, V> Leaf<K, V> {
 
 		if let Some(min) = min {
 			if let Some(item) = self.items.first() {
-				if min >= &item.key {
+				if min >= item.key() {
 					panic!("leaf item key is greater than right separator")
 				}
 			}
@@ -236,7 +254,7 @@ impl<K, V> Leaf<K, V> {
 
 		if let Some(max) = max {
 			if let Some(item) = self.items.last() {
-				if max <= &item.key {
+				if max <= item.key() {
 					panic!("leaf item key is less than left separator")
 				}
 			}
