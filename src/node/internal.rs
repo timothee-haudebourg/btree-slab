@@ -232,17 +232,15 @@ impl<K, V> Internal<K, V> {
 	}
 
 	#[inline]
-	pub fn item(&self, offset: usize) -> &Item<K, V> {
-		&self.other_children[offset].item
+	pub fn item(&self, offset: usize) -> Option<&Item<K, V>> {
+		match self.other_children.get(offset) {
+			Some(b) => Some(&b.item),
+			None => None
+		}
 	}
 
 	#[inline]
-	pub fn item_mut(&mut self, offset: usize) -> &mut Item<K, V> {
-		&mut self.other_children[offset].item
-	}
-
-	#[inline]
-	pub fn item_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
+	pub fn item_mut(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
 		match self.other_children.get_mut(offset) {
 			Some(b) => Some(&mut b.item),
 			None => None

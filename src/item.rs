@@ -4,42 +4,8 @@ use std::{
 		PartialOrd,
 		Ord,
 		Ordering
-	},
-	fmt
+	}
 };
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct ItemAddr {
-	pub id: usize,
-	pub offset: usize
-}
-
-impl ItemAddr {
-	#[inline]
-	pub fn nowhere() -> ItemAddr {
-		ItemAddr {
-			id: std::usize::MAX,
-			offset: 0
-		}
-	}
-
-	#[inline]
-	pub fn is_nowhere(&self) -> bool {
-		self.id == std::usize::MAX
-	}
-}
-
-impl fmt::Display for ItemAddr {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "@{}:{}", self.id, self.offset)
-	}
-}
-
-impl fmt::Debug for ItemAddr {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "@{}:{}", self.id, self.offset)
-	}
-}
 
 pub struct Item<K, V> {
 	key: MaybeUninit<K>,

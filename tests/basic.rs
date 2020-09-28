@@ -56,22 +56,22 @@ pub fn addresses() {
 		btree.insert(*key, *value);
 	}
 
-	for (key, value) in &ITEMS {
+	for (key, _) in &ITEMS {
 		let addr = btree.address_of(key).ok().unwrap();
 
-		match btree.before(addr) {
+		match btree.previous_address(addr) {
 			Some(before_addr) => {
 				assert!(before_addr != addr);
-				let addr_again = btree.after(before_addr).unwrap();
+				let addr_again = btree.next_address(before_addr).unwrap();
 				assert_eq!(addr_again, addr)
 			},
 			None => ()
 		}
 
-		match btree.after(addr) {
+		match btree.next_address(addr) {
 			Some(after_addr) => {
 				assert!(after_addr != addr);
-				let addr_again = btree.before(after_addr).unwrap();
+				let addr_again = btree.previous_address(after_addr).unwrap();
 				assert_eq!(addr_again, addr)
 			},
 			None => ()
@@ -86,13 +86,13 @@ pub fn insert_addresses() {
 	for (key, value) in &ITEMS {
 		let addr = btree.address_of(key).err().unwrap();
 		let new_addr = btree.insert_at(addr, Item::new(*key, *value), None);
-		assert_eq!(btree.item(new_addr).value(), value);
+		assert_eq!(btree.item(new_addr).unwrap().value(), value);
 	}
 }
 
 #[test]
 pub fn remove_addresses() {
-	let mut items = ITEMS;
+	let items = ITEMS;
 
 	for k in 1..items.len() {
 		let mut btree: BTreeMap<usize, usize> = BTreeMap::new();
@@ -107,7 +107,7 @@ pub fn remove_addresses() {
 		for (key, value) in &items {
 			match btree.address_of(key) {
 				Ok(addr) => {
-					let (_, addr) = btree.remove_at(addr);
+					let (_, addr) = btree.remove_at(addr).unwrap();
 					let leaf_addr = btree.leaf_address(addr);
 					btree.insert_at(leaf_addr, Item::new(*key, *value), None);
 					btree.validate();

@@ -159,7 +159,7 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn item(&self, offset: usize) -> &Item<K, V> {
+	pub fn item(&self, offset: usize) -> Option<&Item<K, V>> {
 		match self {
 			Node::Internal(node) => node.item(offset),
 			Node::Leaf(leaf) => leaf.item(offset)
@@ -167,18 +167,10 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn item_mut(&mut self, offset: usize) -> &mut Item<K, V> {
+	pub fn item_mut(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
 		match self {
 			Node::Internal(node) => node.item_mut(offset),
 			Node::Leaf(leaf) => leaf.item_mut(offset)
-		}
-	}
-
-	#[inline]
-	pub fn item_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
-		match self {
-			Node::Internal(node) => node.item_mut_opt(offset),
-			Node::Leaf(leaf) => leaf.item_mut_opt(offset)
 		}
 	}
 
@@ -273,13 +265,23 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn leaf_remove(&mut self, offset: usize) -> Result<Item<K, V>, usize> {
+	pub fn leaf_remove(&mut self, offset: usize) -> Option<Result<Item<K, V>, usize>> {
 		match self {
 			Node::Internal(node) => {
-				let left_child_index = offset;
-				Err(node.child_id(left_child_index))
+				if offset < node.item_count() {
+					let left_child_index = offset;
+					Some(Err(node.child_id(left_child_index)))
+				} else {
+					None
+				}
 			},
-			Node::Leaf(leaf) => Ok(leaf.remove(offset))
+			Node::Leaf(leaf) => {
+				if offset < leaf.item_count() {
+					Some(Ok(leaf.remove(offset)))
+				} else {
+					None
+				}
+			}
 		}
 	}
 

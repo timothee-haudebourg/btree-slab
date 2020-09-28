@@ -94,17 +94,12 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[inline]
-	pub fn item(&self, offset: usize) -> &Item<K, V> {
-		&self.items[offset]
+	pub fn item(&self, offset: usize) -> Option<&Item<K, V>> {
+		self.items.get(offset)
 	}
 
 	#[inline]
-	pub fn item_mut(&mut self, offset: usize) -> &mut Item<K, V> {
-		&mut self.items[offset]
-	}
-
-	#[inline]
-	pub fn item_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
+	pub fn item_mut(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
 		self.items.get_mut(offset)
 	}
 
