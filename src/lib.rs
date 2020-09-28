@@ -13,7 +13,7 @@ mod item;
 pub use node::*;
 pub use item::*;
 
-const M: usize = 6;
+const M: usize = 4;
 
 /// Extension methods.
 ///
@@ -45,16 +45,30 @@ pub trait BTreeExt<K, V> {
 
 	fn get_mut_in(&mut self, key: &K, id: usize) -> Option<&mut V> where K: Ord;
 
-	/// Insert a key-value pair in an internal or leaf node.
-	///
-	/// It is assumed that there is still one free space in the node.
-	fn insert_into(&mut self, node_id: usize, key: K, value: V) -> (Option<V>, ItemAddr) where K: Ord;
+	fn item(&self, addr: ItemAddr) -> &Item<K, V>;
+
+	fn item_mut(&mut self, addr: ItemAddr) -> &mut Item<K, V>;
+
+	fn normalize(&self, addr: ItemAddr) -> Option<ItemAddr>;
+
+	fn leaf_address(&self, addr: ItemAddr) -> ItemAddr;
+
+	fn before(&self, addr: ItemAddr) -> Option<ItemAddr>;
+
+	fn after(&self, addr: ItemAddr) -> Option<ItemAddr>;
+
+	fn address_of(&self, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord;
+
+	fn address_in(&self, id: usize, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord;
+
+	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr;
+
+	fn replace_at(&mut self, addr: ItemAddr, value: V) -> V;
+
+	fn remove_at(&mut self, addr: ItemAddr) -> (Item<K, V>, ItemAddr);
 
 	/// Rebalance a node, if necessary.
 	fn rebalance(&mut self, node_id: usize, addr: ItemAddr) -> ItemAddr;
-
-	/// Remove the item matching the given key from the given node `node_id`.
-	fn remove_from(&mut self, node_id: usize, key: &K) -> Option<(V, ItemAddr)> where K: Ord;
 
 	// /// Update a value in the given node `node_id`.
 	fn update_in<T, F>(&mut self, id: usize, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T);
@@ -139,71 +153,26 @@ impl<K, V> BTreeMap<K, V> {
 	/// Insert a key-value pair in the tree.
 	#[inline]
 	pub fn insert(&mut self, key: K, value: V) -> Option<V> where K: Ord {
-		match self.root {
-			Some(id) => {
-				let (old_value, _) = self.insert_into(id, key, value);
-				old_value
+		match self.address_of(&key) {
+			Ok(addr) => {
+				Some(self.replace_at(addr, value))
 			},
-			None => {
-				let new_root = Node::leaf(None, Item::new(key, value));
-				self.root = Some(self.allocate_node(new_root));
-				self.len += 1;
+			Err(addr) => {
+				self.insert_at(addr, Item::new(key, value), None);
 				None
 			}
 		}
 	}
 
-	/// Insert an item at the given address.
-	/// Return the address of the inserted item in the tree
-	/// (it may differ from the input address if the tree is rebalanced).
-	///
-	/// ## Correctness
-	/// It is assumed that it is btree-correct to insert the given item at the given address.
-	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr {
-		self.node_mut(addr.id).insert(addr.offset, item, opt_right_id);
-		let new_addr = self.rebalance(addr.id, addr);
-		self.len += 1;
-		new_addr
-	}
-
-	fn before(&self, id: usize, offset: usize) -> Option<ItemAddr> {
-		panic!("TODO")
-	}
-
-	fn after(&self, id: usize, offset: usize) -> Option<ItemAddr> {
-		panic!("TODO")
-	}
-
 	// Delete an item by key.
 	#[inline]
 	pub fn remove(&mut self, key: &K) -> Option<V> where K: Ord {
-		match self.root {
-			Some(id) => match self.remove_from(id, key) {
-				Some((value, _)) => Some(value),
-				None => None
+		match self.address_of(key) {
+			Ok(addr) => {
+				let (item, _) = self.remove_at(addr);
+				Some(item.into_value())
 			},
-			None => None
-		}
-	}
-
-	/// Remove the item at the given address.
-	/// Return the address of the next item.
-	/// All other addresses are to be considered invalid.
-	///
-	/// It is assumed that this item exists.
-	#[inline]
-	fn remove_at(&mut self, addr: ItemAddr) -> (Item<K, V>, ItemAddr) {
-		match self.node_mut(addr.id).leaf_remove(addr.offset) {
-			Ok(item) => { // removed from a leaf.
-				let addr = self.rebalance(addr.id, addr);
-				(item, addr)
-			},
-			Err(left_child_id) => { // removed from an internal node.
-				let (separator, leaf_id) = self.remove_rightmost_leaf_of(left_child_id);
-				let item = self.node_mut(addr.id).replace(addr.offset, separator);
-				let addr = self.rebalance(leaf_id, addr);
-				(item, addr)
-			}
+			Err(_) => None
 		}
 	}
 
@@ -257,7 +226,7 @@ impl<K, V> BTreeMap<K, V> {
 
 		match self.nodes[right_sibling_id].pop_left() {
 			Ok((mut value, opt_child_id)) => {
-				std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(pivot_offset));
+				std::mem::swap(&mut value, &mut self.nodes[id].item_mut(pivot_offset));
 				let left_offset = self.nodes[deficient_child_id].push_right(value, opt_child_id);
 
 				// update opt_child's parent
@@ -304,7 +273,7 @@ impl<K, V> BTreeMap<K, V> {
 			};
 			match self.nodes[left_sibling_id].pop_right() {
 				Ok((left_offset, mut value, opt_child_id)) => {
-					std::mem::swap(&mut value, &mut self.nodes[id].item_at_mut(pivot_offset));
+					std::mem::swap(&mut value, &mut self.nodes[id].item_mut(pivot_offset));
 					self.nodes[deficient_child_id].push_left(value, opt_child_id);
 
 					// update opt_child's parent
@@ -473,43 +442,198 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 		}
 	}
 
-	/// Insert a key-value pair in an internal or leaf node.
-	///
-	/// It is assumed that there is still one free space in the node.
-	#[inline]
-	fn insert_into(&mut self, mut id: usize, mut key: K, mut value: V) -> (Option<V>, ItemAddr) where K: Ord {
-		loop {
-			match self.node_mut(id).insert_by_key(key, value) {
-				Ok((offset, old_value)) => {
-					if old_value.is_none() {
-						self.len += 1;
-					}
+	fn item(&self, addr: ItemAddr) -> &Item<K, V> {
+		self.node(addr.id).item(addr.offset)
+	}
 
-					let addr = self.rebalance(id, ItemAddr { id, offset });
-					return (old_value, addr)
+	fn item_mut(&mut self, addr: ItemAddr) -> &mut Item<K, V> {
+		self.node_mut(addr.id).item_mut(addr.offset)
+	}
+
+	/// Normalize an item address so that an out-of-node-bounds address points to the next item.
+	fn normalize(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+		loop {
+			let node = self.node(addr.id);
+			if addr.offset >= node.item_count() {
+				match node.parent() {
+					Some(parent_id) => {
+						addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+						addr.id = parent_id;
+					},
+					None => return None
+				}
+			} else {
+				return Some(addr)
+			}
+		}
+	}
+
+	#[inline]
+	fn leaf_address(&self, mut addr: ItemAddr) -> ItemAddr {
+		if !addr.is_nowhere() {
+			loop {
+				let node = self.node(addr.id);
+				match node.child_id_opt(addr.offset) {
+					Some(child_id) => {
+						addr.id = child_id;
+						addr.offset = self.node(child_id).item_count()
+					},
+					None => break
+				}
+			}
+		}
+
+		addr
+	}
+
+	/// Get the address of the item located before this address.
+	#[inline]
+	fn before(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+		if addr.is_nowhere() {
+			return None
+		}
+
+		loop {
+			let node = self.node(addr.id);
+
+			match node.child_id_opt(addr.offset) {
+				Some(child_id) => {
+					addr.offset = self.node(child_id).item_count();
+					addr.id = child_id;
 				},
-				Err((k, v, _, child_id)) => {
-					key = k;
-					value = v;
-					id = child_id
+				None => {
+					loop {
+						if addr.offset > 0 {
+							addr.offset -= 1;
+							return Some(addr)
+						}
+
+						match self.node(addr.id).parent() {
+							Some(parent_id) => {
+								addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+								addr.id = parent_id;
+							},
+							None => return None
+						}
+					}
 				}
 			}
 		}
 	}
 
-	/// Remove the item matching the given key from the given internal node `id`.
+	/// Get the address of the item located after this address.
 	#[inline]
-	fn remove_from(&mut self, mut id: usize, key: &K) -> Option<(V, ItemAddr)> where K: Ord {
+	fn after(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+		if addr.is_nowhere() {
+			return None
+		}
+
+		addr.offset += 1;
+
+		loop {
+			let node = self.node(addr.id);
+
+			match node.child_id_opt(addr.offset) {
+				Some(child_id) => {
+					addr.offset = 0;
+					addr.id = child_id;
+				},
+				None => {
+					loop {
+						let node = self.node(addr.id);
+
+						if addr.offset < node.item_count() {
+							return Some(addr)
+						}
+
+						match node.parent() {
+							Some(parent_id) => {
+								addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+								addr.id = parent_id;
+							},
+							None => return None
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/// Insert an item at the given address.
+	/// Return the address of the inserted item in the tree
+	/// (it may differ from the input address if the tree is rebalanced).
+	///
+	/// ## Correctness
+	/// It is assumed that it is btree-correct to insert the given item at the given address.
+	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr {
+		if addr.is_nowhere() {
+			if self.is_empty() {
+				let new_root = Node::leaf(None, item);
+				let id = self.allocate_node(new_root);
+				self.root = Some(id);
+				self.len += 1;
+				ItemAddr { id, offset: 0 }
+			} else {
+				panic!("invalid item address")
+			}
+		} else {
+			if self.is_empty() {
+				panic!("invalid item address")
+			} else {
+				self.node_mut(addr.id).insert(addr.offset, item, opt_right_id);
+				let new_addr = self.rebalance(addr.id, addr);
+				self.len += 1;
+				new_addr
+			}
+		}
+	}
+
+	fn replace_at(&mut self, addr: ItemAddr, value: V) -> V {
+		self.node_mut(addr.id).item_mut(addr.offset).set_value(value)
+	}
+
+	fn address_of(&self, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord {
+		match self.root {
+			Some(id) => self.address_in(id, key),
+			None => Err(ItemAddr::nowhere())
+		}
+	}
+
+	fn address_in(&self, mut id: usize, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord {
 		loop {
 			match self.nodes[id].offset_of(key) {
 				Ok(offset) => {
-					let (item, addr) = self.remove_at(ItemAddr { id, offset });
-					return Some((item.into_value(), addr))
+					return Ok(ItemAddr { id, offset })
+				},
+				Err((offset, None)) => {
+					return Err(ItemAddr { id, offset })
 				},
 				Err((_, Some(child_id))) => {
 					id = child_id;
-				},
-				Err((_, None)) => return None
+				}
+			}
+		}
+	}
+
+	/// Remove the item at the given address.
+	/// Return the address of the next item.
+	/// All other addresses are to be considered invalid.
+	///
+	/// It is assumed that this item exists.
+	#[inline]
+	fn remove_at(&mut self, addr: ItemAddr) -> (Item<K, V>, ItemAddr) {
+		self.len -= 1;
+		match self.node_mut(addr.id).leaf_remove(addr.offset) {
+			Ok(item) => { // removed from a leaf.
+				let addr = self.rebalance(addr.id, addr);
+				(item, addr)
+			},
+			Err(left_child_id) => { // removed from an internal node.
+				let new_addr = self.after(addr).unwrap();
+				let (separator, leaf_id) = self.remove_rightmost_leaf_of(left_child_id);
+				let item = self.node_mut(addr.id).replace(addr.offset, separator);
+				let addr = self.rebalance(leaf_id, new_addr);
+				(item, addr)
 			}
 		}
 	}
@@ -519,7 +643,7 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 			match self.nodes[id].offset_of(&key) {
 				Ok(offset) => unsafe {
 					let mut value = MaybeUninit::uninit();
-					let item = &mut self.nodes[id].item_at_mut(offset);
+					let item = &mut self.nodes[id].item_mut(offset);
 					std::mem::swap(&mut value, item.maybe_uninit_value_mut());
 					let (opt_new_value, result) = action(Some(value.assume_init()));
 					match opt_new_value {
@@ -563,6 +687,7 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 					break
 				},
 				Balance::Overflow => {
+					assert!(!self.node_mut(id).is_underflowing());
 					let (median_offset, median, right_node) = self.node_mut(id).split();
 					let right_id = self.allocate_node(right_node);
 
@@ -573,12 +698,18 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 							parent.insert(offset, median, Some(right_id));
 
 							// new address.
-							if addr.offset == median_offset {
-								addr = ItemAddr { id: parent_id, offset }
-							} else if addr.offset > median_offset {
-								addr = ItemAddr {
-									id: right_id,
-									offset: addr.offset - median_offset - 1
+							if addr.id == id {
+								if addr.offset == median_offset {
+									addr = ItemAddr { id: parent_id, offset }
+								} else if addr.offset > median_offset {
+									addr = ItemAddr {
+										id: right_id,
+										offset: addr.offset - median_offset - 1
+									}
+								}
+							} else if addr.id == parent_id {
+								if addr.offset >= offset {
+									addr.offset += 1
 								}
 							}
 
@@ -588,19 +719,21 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 						None => {
 							let left_id = id;
 							let new_root = Node::binary(None, left_id, median, right_id);
-							let id = self.allocate_node(new_root);
+							let root_id = self.allocate_node(new_root);
 
-							self.root = Some(id);
+							self.root = Some(root_id);
 							self.nodes[left_id].set_parent(self.root);
 							self.nodes[right_id].set_parent(self.root);
 
 							// new address.
-							if addr.offset == median_offset {
-								addr = ItemAddr { id, offset: 0 }
-							} else if addr.offset > median_offset {
-								addr = ItemAddr {
-									id: right_id,
-									offset: addr.offset - median_offset - 1
+							if addr.id == id {
+								if addr.offset == median_offset {
+									addr = ItemAddr { id: root_id, offset: 0 }
+								} else if addr.offset > median_offset {
+									addr = ItemAddr {
+										id: right_id,
+										offset: addr.offset - median_offset - 1
+									}
 								}
 							}
 
@@ -632,9 +765,20 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 							if is_empty {
 								self.root = self.node(id).child_id_opt(0);
 
-								// update root's parent
-								if let Some(root_id) = self.root {
-									self.node_mut(root_id).set_parent(None)
+								// update root's parent and addr.
+								match self.root {
+									Some(root_id) => {
+										let root = self.node_mut(root_id);
+										root.set_parent(None);
+
+										if addr.id == id {
+											addr.id = root_id;
+											addr.offset = root.item_count()
+										}
+									},
+									None => {
+										addr = ItemAddr::nowhere()
+									}
 								}
 
 								self.release_node(id);

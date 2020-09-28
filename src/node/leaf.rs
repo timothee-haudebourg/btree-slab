@@ -94,12 +94,17 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[inline]
-	pub fn item_at_mut(&mut self, offset: usize) -> &mut Item<K, V> {
+	pub fn item(&self, offset: usize) -> &Item<K, V> {
+		&self.items[offset]
+	}
+
+	#[inline]
+	pub fn item_mut(&mut self, offset: usize) -> &mut Item<K, V> {
 		&mut self.items[offset]
 	}
 
 	#[inline]
-	pub fn item_at_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
+	pub fn item_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
 		self.items.get_mut(offset)
 	}
 
@@ -126,7 +131,7 @@ impl<K, V> Leaf<K, V> {
 	pub fn split(&mut self) -> (usize, Item<K, V>, Leaf<K, V>) {
 		assert!(self.is_overflowing());
 
-		let median_i = self.items.len() / 2;
+		let median_i = (self.items.len() - 1) / 2;
 
 		let right_items = self.items.drain(median_i+1..);
 		let median = self.items.pop().unwrap();
@@ -135,6 +140,9 @@ impl<K, V> Leaf<K, V> {
 			parent: self.parent,
 			items: right_items
 		};
+
+		assert!(!self.is_underflowing());
+		assert!(!right_leaf.is_underflowing());
 
 		(self.items.len(), median, right_leaf)
 	}
@@ -183,7 +191,7 @@ impl<K, V> Leaf<K, V> {
 	pub fn balance(&self) -> Balance {
 		if self.is_overflowing() {
 			Balance::Overflow
-		} else if self.item_count() < M/2 - 1 {
+		} else if self.is_underflowing() {
 			Balance::Underflow(self.items.is_empty())
 		} else {
 			Balance::Balanced
@@ -193,6 +201,11 @@ impl<K, V> Leaf<K, V> {
 	#[inline]
 	pub fn is_overflowing(&self) -> bool {
 		self.item_count() > M
+	}
+
+	#[inline]
+	pub fn is_underflowing(&self) -> bool {
+		self.item_count() < M/2 - 1
 	}
 
 	/// It is assumed that the leaf will not overflow.

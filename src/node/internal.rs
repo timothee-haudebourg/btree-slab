@@ -14,6 +14,8 @@ use crate::{
 	utils::binary_search_min
 };
 
+const UNDERFLOW: usize = M/2 - 1;
+
 pub struct Branch<K, V> {
 	pub item: Item<K, V>,
 	pub child: usize
@@ -67,13 +69,23 @@ impl<K, V> Internal<K, V> {
 
 	#[inline]
 	pub fn balance(&self) -> Balance {
-		if self.item_count() == M {
+		if self.is_overflowing() {
 			Balance::Overflow
-		} else if self.item_count() < M/2 {
+		} else if self.is_underflowing() {
 			Balance::Underflow(self.other_children.is_empty())
 		} else {
 			Balance::Balanced
 		}
+	}
+
+	#[inline]
+	pub fn is_overflowing(&self) -> bool {
+		self.item_count() >= M
+	}
+
+	#[inline]
+	pub fn is_underflowing(&self) -> bool {
+		self.item_count() < UNDERFLOW
 	}
 
 	#[inline]
@@ -220,12 +232,17 @@ impl<K, V> Internal<K, V> {
 	}
 
 	#[inline]
-	pub fn item_at_mut(&mut self, offset: usize) -> &mut Item<K, V> {
+	pub fn item(&self, offset: usize) -> &Item<K, V> {
+		&self.other_children[offset].item
+	}
+
+	#[inline]
+	pub fn item_mut(&mut self, offset: usize) -> &mut Item<K, V> {
 		&mut self.other_children[offset].item
 	}
 
 	#[inline]
-	pub fn item_at_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
+	pub fn item_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
 		match self.other_children.get_mut(offset) {
 			Some(b) => Some(&mut b.item),
 			None => None
@@ -295,8 +312,10 @@ impl<K, V> Internal<K, V> {
 
 	#[inline]
 	pub fn split(&mut self) -> (usize, Item<K, V>, Internal<K, V>) {
+		assert!(self.is_overflowing()); // implies self.other_children.len() >= 4
+
 		// Index of the median-key item in `other_children`.
-		let median_i = self.other_children.len() / 2; // Since M is at least 3, `median_i` is at least 1.
+		let median_i = (self.other_children.len() - 1) / 2; // Since M is at least 3, `median_i` is at least 1.
 
 		let right_other_children = self.other_children.drain(median_i+1..);
 		let median = self.other_children.pop().unwrap();
@@ -306,6 +325,9 @@ impl<K, V> Internal<K, V> {
 			first_child: median.child,
 			other_children: right_other_children
 		};
+
+		assert!(!self.is_underflowing());
+		assert!(!right_node.is_underflowing());
 
 		(self.other_children.len(), median.item, right_node)
 	}
@@ -325,14 +347,7 @@ impl<K, V> Internal<K, V> {
 		// Since left_index = right_index-1, it is indexed by `left_index` in `other_children`.
 		let item = self.other_children.remove(left_index).item;
 
-		let item_count = self.item_count();
-		let balancing = if item_count >= M/2 {
-			Balance::Balanced
-		} else {
-			Balance::Underflow(item_count == 0)
-		};
-
-		(left_index, left_id, right_id, item, balancing)
+		(left_index, left_id, right_id, item, self.balance())
 	}
 
 	#[inline]
@@ -346,7 +361,7 @@ impl<K, V> Internal<K, V> {
 
 	#[inline]
 	pub fn pop_left(&mut self) -> Result<(Item<K, V>, usize), WouldUnderflow> {
-		if self.item_count() < M/2 {
+		if self.item_count() <= UNDERFLOW {
 			Err(WouldUnderflow)
 		} else {
 			let child_id = self.first_child;
@@ -368,7 +383,7 @@ impl<K, V> Internal<K, V> {
 
 	#[inline]
 	pub fn pop_right(&mut self) -> Result<(usize, Item<K, V>, usize), WouldUnderflow> {
-		if self.item_count() < M/2 {
+		if self.item_count() <= UNDERFLOW {
 			Err(WouldUnderflow)
 		} else {
 			let offset = self.other_children.len();
@@ -412,12 +427,10 @@ impl<K, V> Internal<K, V> {
 		}
 
 		if min.is_some() || max.is_some() { // not root
-			if self.item_count() < (M/2 - 1) {
-				panic!("internal node is underflowing")
-			}
-
-			if self.item_count() == M {
-				panic!("internal node is overflowing")
+			match self.balance() {
+				Balance::Overflow => panic!("internal node is overflowing"),
+				Balance::Underflow(_) => panic!("internal node is underflowing"),
+				_ => ()
 			}
 		} else {
 			if self.item_count() == 0 {

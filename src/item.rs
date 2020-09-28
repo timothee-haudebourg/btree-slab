@@ -4,13 +4,41 @@ use std::{
 		PartialOrd,
 		Ord,
 		Ordering
-	}
+	},
+	fmt
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ItemAddr {
 	pub id: usize,
 	pub offset: usize
+}
+
+impl ItemAddr {
+	#[inline]
+	pub fn nowhere() -> ItemAddr {
+		ItemAddr {
+			id: std::usize::MAX,
+			offset: 0
+		}
+	}
+
+	#[inline]
+	pub fn is_nowhere(&self) -> bool {
+		self.id == std::usize::MAX
+	}
+}
+
+impl fmt::Display for ItemAddr {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "@{}:{}", self.id, self.offset)
+	}
+}
+
+impl fmt::Debug for ItemAddr {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "@{}:{}", self.id, self.offset)
+	}
 }
 
 pub struct Item<K, V> {
@@ -43,6 +71,13 @@ impl<K, V> Item<K, V> {
 	#[inline]
 	pub fn value_mut(&mut self) -> &mut V {
 		unsafe { self.value.assume_init_mut() }
+	}
+
+	#[inline]
+	pub fn set_value(&mut self, value: V) -> V {
+		let mut old_value = MaybeUninit::new(value);
+		std::mem::swap(&mut old_value, &mut self.value);
+		unsafe { old_value.assume_init() }
 	}
 
 	#[inline]

@@ -46,6 +46,22 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
+	pub fn is_underflowing(&self) -> bool {
+		match self {
+			Node::Internal(node) => node.is_underflowing(),
+			Node::Leaf(leaf) => leaf.is_underflowing()
+		}
+	}
+
+	#[inline]
+	pub fn is_overflowing(&self) -> bool {
+		match self {
+			Node::Internal(node) => node.is_overflowing(),
+			Node::Leaf(leaf) => leaf.is_overflowing()
+		}
+	}
+
+	#[inline]
 	pub fn parent(&self) -> Option<usize> {
 		match self {
 			Node::Internal(node) => node.parent(),
@@ -58,6 +74,14 @@ impl<K, V> Node<K, V> {
 		match self {
 			Node::Internal(node) => node.set_parent(p),
 			Node::Leaf(leaf) => leaf.set_parent(p)
+		}
+	}
+
+	#[inline]
+	pub fn item_count(&self) -> usize {
+		match self {
+			Node::Internal(node) => node.item_count(),
+			Node::Leaf(leaf) => leaf.item_count()
 		}
 	}
 
@@ -135,18 +159,26 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn item_at_mut(&mut self, offset: usize) -> &mut Item<K, V> {
+	pub fn item(&self, offset: usize) -> &Item<K, V> {
 		match self {
-			Node::Internal(node) => node.item_at_mut(offset),
-			Node::Leaf(leaf) => leaf.item_at_mut(offset)
+			Node::Internal(node) => node.item(offset),
+			Node::Leaf(leaf) => leaf.item(offset)
 		}
 	}
 
 	#[inline]
-	pub fn item_at_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
+	pub fn item_mut(&mut self, offset: usize) -> &mut Item<K, V> {
 		match self {
-			Node::Internal(node) => node.item_at_mut_opt(offset),
-			Node::Leaf(leaf) => leaf.item_at_mut_opt(offset)
+			Node::Internal(node) => node.item_mut(offset),
+			Node::Leaf(leaf) => leaf.item_mut(offset)
+		}
+	}
+
+	#[inline]
+	pub fn item_mut_opt(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
+		match self {
+			Node::Internal(node) => node.item_mut_opt(offset),
+			Node::Leaf(leaf) => leaf.item_mut_opt(offset)
 		}
 	}
 
