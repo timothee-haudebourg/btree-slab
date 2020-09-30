@@ -60,6 +60,14 @@ impl<K, V> Item<K, V> {
 		}
 	}
 
+	#[inline]
+	pub fn into_pair(self) -> (K, V) {
+		let (key, value) = self.into_inner();
+		unsafe {
+			(key.assume_init(), value.assume_init())
+		}
+	}
+
 	/// Drop the key but not the value which is assumed uninitialized.
 	#[inline]
 	pub unsafe fn forget_value(self) {

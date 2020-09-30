@@ -1,9 +1,13 @@
 use staticvec::StaticVec;
 use crate::{
-	M,
-	Item,
-	Balance,
-	WouldUnderflow,
+	map::{
+		M,
+	},
+	node::{
+		Item,
+		Balance,
+		WouldUnderflow
+	},
 	utils::binary_search_min
 };
 
@@ -44,7 +48,12 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[inline]
-	pub fn items(&self) -> std::slice::Iter<Item<K, V>> {
+	pub fn items(&self) -> &[Item<K, V>] {
+		self.items.as_ref()
+	}
+
+	#[inline]
+	pub fn iter(&self) -> std::slice::Iter<Item<K, V>> {
 		self.items.as_ref().iter()
 	}
 

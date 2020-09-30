@@ -1,4 +1,4 @@
-/// Search in `vec` for the item with the nearest key smaller than the given one.
+/// Search in `vec` for the item with the nearest key smaller or equal to the given one.
 ///
 /// `vec` is assumed to be sorted.
 #[inline]

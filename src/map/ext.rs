@@ -1,12 +1,16 @@
 use std::mem::MaybeUninit;
 use staticvec::StaticVec;
 use crate::{
-	M,
-	BTreeMap,
-	Node,
-	Balance,
-	Item,
-	ItemAddr
+	map::{
+		M,
+		BTreeMap
+	},
+	node::{
+		Node,
+		Balance,
+		Item,
+		ItemAddr
+	}
 };
 
 /// Extension methods.
@@ -59,7 +63,9 @@ pub trait BTreeExt<K, V> {
 
 	fn address_in(&self, id: usize, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord;
 
-	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr;
+	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>) -> ItemAddr;
+
+	fn insert_exactly_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr;
 
 	fn replace_at(&mut self, addr: ItemAddr, value: V) -> V;
 
@@ -70,6 +76,8 @@ pub trait BTreeExt<K, V> {
 
 	// /// Update a value in the given node `node_id`.
 	fn update_in<T, F>(&mut self, id: usize, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T);
+
+	fn update_at<T, F>(&mut self, addr: ItemAddr, action: F) -> T where K: Ord, F: FnOnce(V) -> (Option<V>, T);
 
 	/// Take the right-most leaf value in the given node.
 	fn remove_rightmost_leaf_of(&mut self, node_id: usize) -> (Item<K, V>, usize);
@@ -305,13 +313,17 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 		}
 	}
 
+	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>) -> ItemAddr {
+		self.insert_exactly_at(self.leaf_address(addr), item, None)
+	}
+
 	/// Insert an item at the given address.
 	/// Return the address of the inserted item in the tree
 	/// (it may differ from the input address if the tree is rebalanced).
 	///
 	/// ## Correctness
 	/// It is assumed that it is btree-correct to insert the given item at the given address.
-	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr {
+	fn insert_exactly_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr {
 		if addr.is_nowhere() {
 			if self.is_empty() {
 				let new_root = Node::leaf(None, item);
@@ -399,7 +411,7 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 							std::mem::swap(&mut new_value, item.maybe_uninit_value_mut());
 						},
 						None => {
-							let (item, _) = self.remove_at(ItemAddr { id, offset }).unwrap();
+							let (item, _) = self.remove_at(ItemAddr::new(id, offset)).unwrap();
 							// item's value is NOT initialized here.
 							// It must not be dropped.
 							item.forget_value()
@@ -411,7 +423,7 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 				Err((offset, None)) => {
 					let (opt_new_value, result) = action(None);
 					if let Some(new_value) = opt_new_value {
-						self.insert_at(ItemAddr { id, offset }, Item::new(key, new_value), None);
+						self.insert_exactly_at(ItemAddr::new(id, offset), Item::new(key, new_value), None);
 					}
 
 					return result
@@ -420,6 +432,29 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 					id = child_id;
 				}
 			}
+		}
+	}
+
+	fn update_at<T, F>(&mut self, addr: ItemAddr, action: F) -> T where K: Ord, F: FnOnce(V) -> (Option<V>, T) {
+		unsafe {
+			let mut value = MaybeUninit::uninit();
+			let item = self.nodes[addr.id].item_mut(addr.offset).unwrap();
+			std::mem::swap(&mut value, item.maybe_uninit_value_mut());
+			let (opt_new_value, result) = action(value.assume_init());
+			match opt_new_value {
+				Some(new_value) => {
+					let mut new_value = MaybeUninit::new(new_value);
+					std::mem::swap(&mut new_value, item.maybe_uninit_value_mut());
+				},
+				None => {
+					let (item, _) = self.remove_at(addr).unwrap();
+					// item's value is NOT initialized here.
+					// It must not be dropped.
+					item.forget_value()
+				}
+			}
+
+			return result
 		}
 	}
 
