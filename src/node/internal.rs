@@ -23,29 +23,34 @@ pub struct Branch<K, V> {
 	pub child: usize
 }
 
-impl<K: PartialEq, V> PartialEq<K> for Branch<K, V> {
-	fn eq(&self, key: &K) -> bool {
-		self.item.key().eq(key)
+impl<K, V, T: PartialEq<K>> PartialEq<T> for Branch<K, V> {
+	fn eq(&self, other: &T) -> bool {
+		other.eq(self.item.key())
 	}
 }
 
-impl<K: Ord + PartialEq, V> PartialOrd<K> for Branch<K, V> {
-	fn partial_cmp(&self, key: &K) -> Option<Ordering> {
-		Some(self.item.key().cmp(key))
+impl<K, V, T: PartialOrd<K>> PartialOrd<T> for Branch<K, V> {
+	fn partial_cmp(&self, other: &T) -> Option<Ordering> {
+		match other.partial_cmp(self.item.key()) {
+			Some(Ordering::Greater) => Some(Ordering::Less),
+			Some(Ordering::Less) => Some(Ordering::Greater),
+			Some(Ordering::Equal) => Some(Ordering::Equal),
+			None => None
+		}
 	}
 }
 
-impl<K: PartialEq, V> PartialEq for Branch<K, V> {
-	fn eq(&self, other: &Branch<K, V>) -> bool {
-		self.item.key().eq(other.item.key())
-	}
-}
-
-impl<K: Ord + PartialEq, V> PartialOrd for Branch<K, V> {
-	fn partial_cmp(&self, other: &Branch<K, V>) -> Option<Ordering> {
-		Some(self.item.key().cmp(other.item.key()))
-	}
-}
+// impl<K: PartialEq, V> PartialEq for Branch<K, V> {
+// 	fn eq(&self, other: &Branch<K, V>) -> bool {
+// 		self.item.key().eq(other.item.key())
+// 	}
+// }
+//
+// impl<K: Ord + PartialEq, V> PartialOrd for Branch<K, V> {
+// 	fn partial_cmp(&self, other: &Branch<K, V>) -> Option<Ordering> {
+// 		Some(self.item.key().cmp(other.item.key()))
+// 	}
+// }
 
 pub struct Internal<K, V> {
 	parent: usize,
