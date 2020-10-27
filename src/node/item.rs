@@ -34,6 +34,12 @@ impl<K, V> Item<K, V> {
 		unsafe { self.key.assume_init_ref() }
 	}
 
+	/// Modifying a key in such a way that its order with regard to other keys changes is a logical error.
+	#[inline]
+	pub fn key_mut(&mut self) -> &mut K {
+		unsafe { self.key.assume_init_mut() }
+	}
+
 	#[inline]
 	pub fn value(&self) -> &V {
 		unsafe { self.value.assume_init_ref() }
