@@ -15,6 +15,12 @@ pub struct Item<K, V> {
 	value: MaybeUninit<V>
 }
 
+impl<K, V> AsRef<Item<K, V>> for Item<K, V> {
+	fn as_ref(&self) -> &Self {
+		self
+	}
+}
+
 impl<K, V> Item<K, V> {
 	pub fn new(key: K, value: V) -> Item<K, V> {
 		Item {

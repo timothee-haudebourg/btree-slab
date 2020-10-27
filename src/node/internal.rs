@@ -23,6 +23,12 @@ pub struct Branch<K, V> {
 	pub child: usize
 }
 
+impl<K, V> AsRef<Item<K, V>> for Branch<K, V> {
+	fn as_ref(&self) -> &Item<K, V> {
+		&self.item
+	}
+}
+
 impl<K, V, T: PartialEq<K>> PartialEq<T> for Branch<K, V> {
 	fn eq(&self, other: &T) -> bool {
 		other.eq(self.item.key())
