@@ -1,7 +1,7 @@
 mod item;
 mod addr;
 mod leaf;
-mod internal;
+pub mod internal;
 
 pub use item::Item;
 pub use addr::ItemAddr;

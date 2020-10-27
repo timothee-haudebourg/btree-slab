@@ -1,5 +1,4 @@
 #![feature(min_const_generics)]
-#![feature(move_ref_pattern)]
 #![feature(is_sorted)]
 #![feature(maybe_uninit_ref)]
 

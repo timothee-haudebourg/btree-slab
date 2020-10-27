@@ -2,7 +2,6 @@ use std::{
 	mem::MaybeUninit,
 	cmp::{
 		PartialOrd,
-		Ord,
 		Ordering
 	}
 };

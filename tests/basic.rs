@@ -7,8 +7,8 @@ use rand::{
 };
 use linear_btree::{
 	BTreeMap,
-	BTreeExt,
-	Item
+	map::BTreeExt,
+	node::Item
 };
 
 const SEED: &'static [u8; 16] = b"testseedtestseed";
@@ -85,7 +85,7 @@ pub fn insert_addresses() {
 
 	for (key, value) in &ITEMS {
 		let addr = btree.address_of(key).err().unwrap();
-		let new_addr = btree.insert_at(addr, Item::new(*key, *value), None);
+		let new_addr = btree.insert_exactly_at(addr, Item::new(*key, *value), None);
 		assert_eq!(btree.item(new_addr).unwrap().value(), value);
 	}
 }
@@ -108,8 +108,7 @@ pub fn remove_addresses() {
 			match btree.address_of(key) {
 				Ok(addr) => {
 					let (_, addr) = btree.remove_at(addr).unwrap();
-					let leaf_addr = btree.leaf_address(addr);
-					btree.insert_at(leaf_addr, Item::new(*key, *value), None);
+					btree.insert_at(addr, Item::new(*key, *value));
 					btree.validate();
 				},
 				Err(_) => break
