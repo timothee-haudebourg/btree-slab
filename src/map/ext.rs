@@ -10,7 +10,9 @@ use crate::{
 		Balance,
 		Item,
 		ItemAddr
-	}
+	},
+	Container,
+	ContainerMut
 };
 
 /// Extension methods.
@@ -19,33 +21,19 @@ use crate::{
 /// These methods are not intended to be directly called by users, but can be used to
 /// extends the data structure with new functionalities.
 pub trait BTreeExt<K, V> {
-	/// Set the new known number of items in the tree.
-	fn set_len(&mut self, len: usize);
-
 	/// Get the root node id.
 	///
 	/// Returns `None` if the tree is empty.
 	fn root_id(&self) -> Option<usize>;
-
-	fn set_root_id(&mut self, id: Option<usize>);
 
 	/// Get the node associated to the given `id`.
 	///
 	/// Panics if `id` is out of bounds.
 	fn node(&self, id: usize) -> &Node<K, V>;
 
-	/// Get the node associated to the given `id` mutabily.
-	///
-	/// Panics if `id` is out of bounds.
-	fn node_mut(&mut self, id: usize) -> &mut Node<K, V>;
-
 	fn get_in(&self, key: &K, id: usize) -> Option<&V> where K: Ord;
 
-	fn get_mut_in(&mut self, key: &K, id: usize) -> Option<&mut V> where K: Ord;
-
 	fn item(&self, addr: ItemAddr) -> Option<&Item<K, V>>;
-
-	fn item_mut(&mut self, addr: ItemAddr) -> Option<&mut Item<K, V>>;
 
 	fn first_address(&self) -> ItemAddr;
 
@@ -62,6 +50,34 @@ pub trait BTreeExt<K, V> {
 	fn address_of(&self, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord;
 
 	fn address_in(&self, id: usize, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord;
+
+	/// Validate the tree.
+	///
+	/// Panics if the tree is not a valid B-Tree.
+	#[cfg(debug_assertions)]
+	fn validate(&self) where K: Ord;
+
+	/// Validate the given node and returns the depth of the node.
+	///
+	/// Panics if the tree is not a valid B-Tree.
+	#[cfg(debug_assertions)]
+	fn validate_node(&self, id: usize, parent: Option<usize>, min: Option<&K>, max: Option<&K>) -> usize where K: Ord;
+}
+
+pub trait BTreeExtMut<K, V> {
+	/// Set the new known number of items in the tree.
+	fn set_len(&mut self, len: usize);
+
+	fn set_root_id(&mut self, id: Option<usize>);
+
+	/// Get the node associated to the given `id` mutabily.
+	///
+	/// Panics if `id` is out of bounds.
+	fn node_mut(&mut self, id: usize) -> &mut Node<K, V>;
+
+	fn get_mut_in(&mut self, key: &K, id: usize) -> Option<&mut V> where K: Ord;
+
+	fn item_mut(&mut self, addr: ItemAddr) -> Option<&mut Item<K, V>>;
 
 	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>) -> ItemAddr;
 
@@ -87,31 +103,9 @@ pub trait BTreeExt<K, V> {
 
 	/// Release the given node identifier and return the node it used to identify.
 	fn release_node(&mut self, id: usize) -> Node<K, V>;
-
-	/// Validate the tree.
-	///
-	/// Panics if the tree is not a valid B-Tree.
-	#[cfg(debug_assertions)]
-	fn validate(&self) where K: Ord;
-
-	/// Validate the given node and returns the depth of the node.
-	///
-	/// Panics if the tree is not a valid B-Tree.
-	#[cfg(debug_assertions)]
-	fn validate_node(&self, id: usize, parent: Option<usize>, min: Option<&K>, max: Option<&K>) -> usize where K: Ord;
 }
 
-impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
-	#[inline]
-	fn set_len(&mut self, new_len: usize) {
-		self.len = new_len
-	}
-
-	#[inline]
-	fn set_root_id(&mut self, id: Option<usize>) {
-		self.root = id
-	}
-
+impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	#[inline]
 	fn root_id(&self) -> Option<usize> {
 		self.root
@@ -119,18 +113,13 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 
 	#[inline]
 	fn node(&self, id: usize) -> &Node<K, V> {
-		&self.nodes[id]
-	}
-
-	#[inline]
-	fn node_mut(&mut self, id: usize) -> &mut Node<K, V> {
-		&mut self.nodes[id]
+		self.nodes.get(id).unwrap()
 	}
 
 	#[inline]
 	fn get_in(&self, key: &K, mut id: usize) -> Option<&V> where K: Ord {
 		loop {
-			match self.nodes[id].get(key) {
+			match self.node(id).get(key) {
 				Ok(value_opt) => return value_opt,
 				Err(child_id) => {
 					id = child_id
@@ -139,32 +128,8 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 		}
 	}
 
-	#[inline]
-	fn get_mut_in<'a>(&'a mut self, key: &K, mut id: usize) -> Option<&'a mut V> where K: Ord {
-		// The borrow checker is unable to predict that `*self`
-		// is not borrowed more that once at a time.
-		// That's why we need this little unsafe pointer gymnastic.
-
-		let value_ptr = loop {
-			match self.nodes[id].get_mut(key) {
-				Ok(value_opt) => break value_opt.map(|value_ref| value_ref as *mut V),
-				Err(child_id) => {
-					id = child_id
-				}
-			}
-		};
-
-		unsafe {
-			value_ptr.map(|ptr| &mut *ptr)
-		}
-	}
-
 	fn item(&self, addr: ItemAddr) -> Option<&Item<K, V>> {
 		self.node(addr.id).item(addr.offset)
-	}
-
-	fn item_mut(&mut self, addr: ItemAddr) -> Option<&mut Item<K, V>> {
-		self.node_mut(addr.id).item_mut(addr.offset)
 	}
 
 	fn first_address(&self) -> ItemAddr {
@@ -313,6 +278,107 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 		}
 	}
 
+	fn address_of(&self, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord {
+		match self.root {
+			Some(id) => self.address_in(id, key),
+			None => Err(ItemAddr::nowhere())
+		}
+	}
+
+	fn address_in(&self, mut id: usize, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord {
+		loop {
+			match self.node(id).offset_of(key) {
+				Ok(offset) => {
+					return Ok(ItemAddr { id, offset })
+				},
+				Err((offset, None)) => {
+					return Err(ItemAddr { id, offset })
+				},
+				Err((_, Some(child_id))) => {
+					id = child_id;
+				}
+			}
+		}
+	}
+
+	#[cfg(debug_assertions)]
+	fn validate(&self) where K: Ord {
+		match self.root {
+			Some(id) => {
+				self.validate_node(id, None, None, None);
+			},
+			None => ()
+		}
+	}
+
+	/// Validate the given node and returns the depth of the node.
+	#[cfg(debug_assertions)]
+	fn validate_node(&self, id: usize, parent: Option<usize>, min: Option<&K>, max: Option<&K>) -> usize where K: Ord {
+		let node = self.node(id);
+		node.validate(parent, min, max);
+
+		let mut depth = None;
+		for (i, child_id) in node.children().enumerate() {
+			let (min, max) = node.separators(i);
+
+			let child_depth = self.validate_node(child_id, Some(id), min, max);
+			match depth {
+				None => depth = Some(child_depth),
+				Some(depth) => {
+					if depth != child_depth {
+						panic!("tree not balanced")
+					}
+				}
+			}
+		}
+
+		match depth {
+			Some(depth) => depth + 1,
+			None => 0
+		}
+	}
+}
+
+impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> {
+	#[inline]
+	fn set_len(&mut self, new_len: usize) {
+		self.len = new_len
+	}
+
+	#[inline]
+	fn set_root_id(&mut self, id: Option<usize>) {
+		self.root = id
+	}
+
+	#[inline]
+	fn node_mut(&mut self, id: usize) -> &mut Node<K, V> {
+		self.nodes.get_mut(id).unwrap()
+	}
+
+	#[inline]
+	fn get_mut_in<'a>(&'a mut self, key: &K, mut id: usize) -> Option<&'a mut V> where K: Ord {
+		// The borrow checker is unable to predict that `*self`
+		// is not borrowed more that once at a time.
+		// That's why we need this little unsafe pointer gymnastic.
+
+		let value_ptr = loop {
+			match self.node_mut(id).get_mut(key) {
+				Ok(value_opt) => break value_opt.map(|value_ref| value_ref as *mut V),
+				Err(child_id) => {
+					id = child_id
+				}
+			}
+		};
+
+		unsafe {
+			value_ptr.map(|ptr| &mut *ptr)
+		}
+	}
+
+	fn item_mut(&mut self, addr: ItemAddr) -> Option<&mut Item<K, V>> {
+		self.node_mut(addr.id).item_mut(addr.offset)
+	}
+
 	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>) -> ItemAddr {
 		self.insert_exactly_at(self.leaf_address(addr), item, None)
 	}
@@ -350,29 +416,6 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 		self.node_mut(addr.id).item_mut(addr.offset).unwrap().set_value(value)
 	}
 
-	fn address_of(&self, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord {
-		match self.root {
-			Some(id) => self.address_in(id, key),
-			None => Err(ItemAddr::nowhere())
-		}
-	}
-
-	fn address_in(&self, mut id: usize, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord {
-		loop {
-			match self.nodes[id].offset_of(key) {
-				Ok(offset) => {
-					return Ok(ItemAddr { id, offset })
-				},
-				Err((offset, None)) => {
-					return Err(ItemAddr { id, offset })
-				},
-				Err((_, Some(child_id))) => {
-					id = child_id;
-				}
-			}
-		}
-	}
-
 	/// Remove the item at the given address.
 	/// Return the address of the next item.
 	/// All other addresses are to be considered invalid.
@@ -399,10 +442,10 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 
 	fn update_in<T, F>(&mut self, mut id: usize, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
 		loop {
-			match self.nodes[id].offset_of(&key) {
+			match self.node(id).offset_of(&key) {
 				Ok(offset) => unsafe {
 					let mut value = MaybeUninit::uninit();
-					let item = self.nodes[id].item_mut(offset).unwrap();
+					let item = self.node_mut(id).item_mut(offset).unwrap();
 					std::mem::swap(&mut value, item.maybe_uninit_value_mut());
 					let (opt_new_value, result) = action(Some(value.assume_init()));
 					match opt_new_value {
@@ -438,7 +481,7 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 	fn update_at<T, F>(&mut self, addr: ItemAddr, action: F) -> T where K: Ord, F: FnOnce(V) -> (Option<V>, T) {
 		unsafe {
 			let mut value = MaybeUninit::uninit();
-			let item = self.nodes[addr.id].item_mut(addr.offset).unwrap();
+			let item = self.node_mut(addr.id).item_mut(addr.offset).unwrap();
 			std::mem::swap(&mut value, item.maybe_uninit_value_mut());
 			let (opt_new_value, result) = action(value.assume_init());
 			match opt_new_value {
@@ -504,8 +547,8 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 							let root_id = self.allocate_node(new_root);
 
 							self.root = Some(root_id);
-							self.nodes[left_id].set_parent(self.root);
-							self.nodes[right_id].set_parent(self.root);
+							self.node_mut(left_id).set_parent(Some(root_id));
+							self.node_mut(right_id).set_parent(Some(root_id));
 
 							// new address.
 							if addr.id == id {
@@ -583,7 +626,7 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 	#[inline]
 	fn remove_rightmost_leaf_of(&mut self, mut id: usize) -> (Item<K, V>, usize) {
 		loop {
-			match self.nodes[id].remove_rightmost_leaf() {
+			match self.node_mut(id).remove_rightmost_leaf() {
 				Ok(result) => return (result, id),
 				Err(child_id) => {
 					id = child_id;
@@ -598,12 +641,12 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 		let mut children: StaticVec<usize, M> = StaticVec::new();
 		let id = self.nodes.insert(node);
 
-		for child_id in self.nodes[id].children() {
+		for child_id in self.node(id).children() {
 			children.push(child_id)
 		}
 
 		for child_id in children {
-			self.nodes[child_id].set_parent(Some(id))
+			self.node_mut(child_id).set_parent(Some(id))
 		}
 
 		id
@@ -613,42 +656,5 @@ impl<K, V> BTreeExt<K, V> for BTreeMap<K, V> {
 	#[inline]
 	fn release_node(&mut self, id: usize) -> Node<K, V> {
 		self.nodes.remove(id)
-	}
-
-	#[cfg(debug_assertions)]
-	fn validate(&self) where K: Ord {
-		match self.root {
-			Some(id) => {
-				self.validate_node(id, None, None, None);
-			},
-			None => ()
-		}
-	}
-
-	/// Validate the given node and returns the depth of the node.
-	#[cfg(debug_assertions)]
-	fn validate_node(&self, id: usize, parent: Option<usize>, min: Option<&K>, max: Option<&K>) -> usize where K: Ord {
-		let node = self.node(id);
-		node.validate(parent, min, max);
-
-		let mut depth = None;
-		for (i, child_id) in node.children().enumerate() {
-			let (min, max) = node.separators(i);
-
-			let child_depth = self.validate_node(child_id, Some(id), min, max);
-			match depth {
-				None => depth = Some(child_depth),
-				Some(depth) => {
-					if depth != child_depth {
-						panic!("tree not balanced")
-					}
-				}
-			}
-		}
-
-		match depth {
-			Some(depth) => depth + 1,
-			None => 0
-		}
 	}
 }

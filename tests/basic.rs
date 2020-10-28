@@ -7,7 +7,10 @@ use rand::{
 };
 use linear_btree::{
 	BTreeMap,
-	map::BTreeExt,
+	map::{
+		BTreeExt,
+		BTreeExtMut
+	},
 	node::Item
 };
 

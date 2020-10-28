@@ -1,11 +1,16 @@
 use slab::Slab;
 
-use crate::node::{
-	Item,
-	ItemAddr,
-	Node,
-	Balance,
-	WouldUnderflow
+use std::marker::PhantomData;
+use crate::{
+	node::{
+		Item,
+		ItemAddr,
+		Node,
+		Balance,
+		WouldUnderflow
+	},
+	Container,
+	ContainerMut
 };
 
 mod ext;
@@ -105,25 +110,30 @@ pub const M: usize = 8;
 /// to any other key, as determined by the [`Ord`] trait, changes while it is in the map.
 /// This is normally only possible through [`Cell`](`std::cell::Cell`),
 /// [`RefCell`](`std::cell::RefCell`), global state, I/O, or unsafe code.
-pub struct BTreeMap<K, V> {
+pub struct BTreeMap<K, V, C = Slab<Node<K, V>>> {
 	/// Allocated and free nodes.
-	nodes: Slab<Node<K, V>>,
+	nodes: C,
 
 	/// Root node id.
 	root: Option<usize>,
 
 	/// Number of items in the tree.
-	len: usize
+	len: usize,
+
+	k: PhantomData<K>,
+	v: PhantomData<V>
 }
 
-impl<K, V> BTreeMap<K, V> {
+impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Create a new empty B-tree.
-	pub fn new() -> BTreeMap<K, V> {
+	pub fn new() -> BTreeMap<K, V, C> where C: Default {
 		assert!(M >= 4);
 		BTreeMap {
-			nodes: Slab::new(),
+			nodes: Default::default(),
 			root: None,
-			len: 0
+			len: 0,
+			k: PhantomData,
+			v: PhantomData
 		}
 	}
 
@@ -146,16 +156,58 @@ impl<K, V> BTreeMap<K, V> {
 	}
 
 	#[inline]
+	pub fn contains(&self, key: &K) -> bool where K: Ord {
+		self.get(key).is_some()
+	}
+
+	/// Write the tree in the DOT graph descrption language.
+	///
+	/// Requires the `dot` feature.
+	#[cfg(feature = "dot")]
+	#[inline]
+	pub fn dot_write<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+		write!(f, "digraph tree {{\n\tnode [shape=record];\n")?;
+		match self.root {
+			Some(id) => self.dot_write_node(f, id)?,
+			None => ()
+		}
+		write!(f, "}}")
+	}
+
+	/// Write the given node in the DOT graph descrption language.
+	///
+	/// Requires the `dot` feature.
+	#[cfg(feature = "dot")]
+	#[inline]
+	fn dot_write_node<W: std::io::Write>(&self, f: &mut W, id: usize) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+		let name = format!("n{}", id);
+		let node = self.node(id);
+
+		write!(f, "\t{} [label=\"", name)?;
+		if let Some(parent) = node.parent() {
+			write!(f, "({})|", parent)?;
+		}
+
+		node.dot_write_label(f)?;
+		write!(f, "({})\"];\n", id)?;
+
+		for child_id in node.children() {
+			self.dot_write_node(f, child_id)?;
+			let child_name = format!("n{}", child_id);
+			write!(f, "\t{} -> {}\n", name, child_name)?;
+		}
+
+		Ok(())
+	}
+}
+
+impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
+	#[inline]
 	pub fn get_mut(&mut self, key: &K) -> Option<&mut V> where K: Ord {
 		match self.root {
 			Some(id) => self.get_mut_in(key, id),
 			None => None
 		}
-	}
-
-	#[inline]
-	pub fn contains(&self, key: &K) -> bool where K: Ord {
-		self.get(key).is_some()
 	}
 
 	/// Insert a key-value pair in the tree.
@@ -216,7 +268,7 @@ impl<K, V> BTreeMap<K, V> {
 	}
 
 	#[inline]
-	pub fn iter_mut(&mut self) -> IterMut<K, V> {
+	pub fn iter_mut(&mut self) -> IterMut<K, V, C> {
 		IterMut::new(self)
 	}
 
@@ -229,7 +281,7 @@ impl<K, V> BTreeMap<K, V> {
 		let pivot_offset = deficient_child_index;
 		let right_sibling_index = deficient_child_index + 1;
 		let (right_sibling_id, deficient_child_id) = {
-			let node = &self.nodes[id];
+			let node = self.node(id);
 
 			if right_sibling_index >= node.child_count() {
 				return false // no right sibling
@@ -238,14 +290,14 @@ impl<K, V> BTreeMap<K, V> {
 			(node.child_id(right_sibling_index), node.child_id(deficient_child_index))
 		};
 
-		match self.nodes[right_sibling_id].pop_left() {
+		match self.node_mut(right_sibling_id).pop_left() {
 			Ok((mut value, opt_child_id)) => {
-				std::mem::swap(&mut value, self.nodes[id].item_mut(pivot_offset).unwrap());
-				let left_offset = self.nodes[deficient_child_id].push_right(value, opt_child_id);
+				std::mem::swap(&mut value, self.node_mut(id).item_mut(pivot_offset).unwrap());
+				let left_offset = self.node_mut(deficient_child_id).push_right(value, opt_child_id);
 
 				// update opt_child's parent
 				if let Some(child_id) = opt_child_id {
-					self.nodes[child_id].set_parent(Some(deficient_child_id))
+					self.node_mut(child_id).set_parent(Some(deficient_child_id))
 				}
 
 				// update address.
@@ -282,17 +334,17 @@ impl<K, V> BTreeMap<K, V> {
 			let left_sibling_index = deficient_child_index - 1;
 			let pivot_offset = left_sibling_index;
 			let (left_sibling_id, deficient_child_id) = {
-				let node = &self.nodes[id];
+				let node = self.node(id);
 				(node.child_id(left_sibling_index), node.child_id(deficient_child_index))
 			};
-			match self.nodes[left_sibling_id].pop_right() {
+			match self.node_mut(left_sibling_id).pop_right() {
 				Ok((left_offset, mut value, opt_child_id)) => {
-					std::mem::swap(&mut value, self.nodes[id].item_mut(pivot_offset).unwrap());
-					self.nodes[deficient_child_id].push_left(value, opt_child_id);
+					std::mem::swap(&mut value, self.node_mut(id).item_mut(pivot_offset).unwrap());
+					self.node_mut(deficient_child_id).push_left(value, opt_child_id);
 
 					// update opt_child's parent
 					if let Some(child_id) = opt_child_id {
-						self.nodes[child_id].set_parent(Some(deficient_child_id))
+						self.node_mut(child_id).set_parent(Some(deficient_child_id))
 					}
 
 					// update address.
@@ -326,20 +378,20 @@ impl<K, V> BTreeMap<K, V> {
 	fn merge(&mut self, id: usize, deficient_child_index: usize, mut addr: ItemAddr) -> (Balance, ItemAddr) {
 		let (offset, left_id, right_id, separator, balance) = if deficient_child_index > 0 {
 			// merge with left sibling
-			self.nodes[id].merge(deficient_child_index-1, deficient_child_index)
+			self.node_mut(id).merge(deficient_child_index-1, deficient_child_index)
 		} else {
 			// merge with right sibling
-			self.nodes[id].merge(deficient_child_index, deficient_child_index+1)
+			self.node_mut(id).merge(deficient_child_index, deficient_child_index+1)
 		};
 
 		// update children's parent.
 		let right_node = self.release_node(right_id);
 		for right_child_id in right_node.children() {
-			self.nodes[right_child_id].set_parent(Some(left_id));
+			self.node_mut(right_child_id).set_parent(Some(left_id));
 		}
 
 		// actually merge.
-		let left_offset = self.nodes[left_id].append(separator, right_node);
+		let left_offset = self.node_mut(left_id).append(separator, right_node);
 
 		// update addr.
 		if addr.id == id {
@@ -356,60 +408,20 @@ impl<K, V> BTreeMap<K, V> {
 
 		(balance, addr)
 	}
-
-	/// Write the tree in the DOT graph descrption language.
-	///
-	/// Requires the `dot` feature.
-	#[cfg(feature = "dot")]
-	#[inline]
-	pub fn dot_write<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
-		write!(f, "digraph tree {{\n\tnode [shape=record];\n")?;
-		match self.root {
-			Some(id) => self.dot_write_node(f, id)?,
-			None => ()
-		}
-		write!(f, "}}")
-	}
-
-	/// Write the given node in the DOT graph descrption language.
-	///
-	/// Requires the `dot` feature.
-	#[cfg(feature = "dot")]
-	#[inline]
-	fn dot_write_node<W: std::io::Write>(&self, f: &mut W, id: usize) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
-		let name = format!("n{}", id);
-		let node = self.node(id);
-
-		write!(f, "\t{} [label=\"", name)?;
-		if let Some(parent) = node.parent() {
-			write!(f, "({})|", parent)?;
-		}
-
-		node.dot_write_label(f)?;
-		write!(f, "({})\"];\n", id)?;
-
-		for child_id in node.children() {
-			self.dot_write_node(f, child_id)?;
-			let child_name = format!("n{}", child_id);
-			write!(f, "\t{} -> {}\n", name, child_name)?;
-		}
-
-		Ok(())
-	}
 }
 
 /// Iterator that can mutate the tree in place.
-pub struct IterMut<'a, K, V> {
+pub struct IterMut<'a, K, V, C = Slab<Node<K, V>>> {
 	/// The tree reference.
-	btree: &'a mut BTreeMap<K, V>,
+	btree: &'a mut BTreeMap<K, V, C>,
 
 	/// Address of the next item.
 	addr: ItemAddr
 }
 
-impl<'a, K, V> IterMut<'a, K, V> {
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	/// Create a new iterator over all the items of the map.
-	pub fn new(btree: &'a mut BTreeMap<K, V>) -> IterMut<'a, K, V> {
+	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> IterMut<'a, K, V, C> {
 		let addr = btree.first_address();
 		IterMut {
 			btree,

@@ -1,26 +1,31 @@
 use std::fmt;
+use slab::Slab;
 use crate::{
 	map::{
 		BTreeMap,
-		BTreeExt
+		BTreeExt,
+		BTreeExtMut
 	},
 	node::{
+		Node,
 		Item,
 		ItemAddr
-	}
+	},
+	Container,
+	ContainerMut
 };
 
 /// A view into a single entry in a map, which may either be vacant or occupied.
 ///
 /// This enum is constructed from the [`entry`](`BTreeMap#entry`) method on [`BTreeMap`].
-pub enum Entry<'a, K, V> {
-	Vacant(VacantEntry<'a, K, V>),
-	Occupied(OccupiedEntry<'a, K, V>)
+pub enum Entry<'a, K, V, C = Slab<Node<K, V>>> {
+	Vacant(VacantEntry<'a, K, V, C>),
+	Occupied(OccupiedEntry<'a, K, V, C>)
 }
 
 use Entry::*;
 
-impl<'a, K, V> Entry<'a, K, V> {
+impl<'a, K, V, C: Container<Node<K, V>>> Entry<'a, K, V, C> {
 	/// Gets the address of the entry in the B-Tree.
 	#[inline]
 	pub fn address(&self) -> ItemAddr {
@@ -30,6 +35,26 @@ impl<'a, K, V> Entry<'a, K, V> {
 		}
 	}
 
+	/// Returns a reference to this entry's key.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use linear_btree::BTreeMap;
+	///
+	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
+	/// assert_eq!(map.entry("poneyland").key(), &"poneyland");
+	/// ```
+	#[inline]
+	pub fn key(&self) -> &K {
+		match *self {
+			Occupied(ref entry) => entry.key(),
+			Vacant(ref entry) => entry.key(),
+		}
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> Entry<'a, K, V, C> {
 	/// Ensures a value is in the entry by inserting the default if empty, and returns
 	/// a mutable reference to the value in the entry.
 	///
@@ -101,24 +126,6 @@ impl<'a, K, V> Entry<'a, K, V> {
 		}
 	}
 
-	/// Returns a reference to this entry's key.
-	///
-	/// # Examples
-	///
-	/// ```
-	/// use linear_btree::BTreeMap;
-	///
-	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
-	/// assert_eq!(map.entry("poneyland").key(), &"poneyland");
-	/// ```
-	#[inline]
-	pub fn key(&self) -> &K {
-		match *self {
-			Occupied(ref entry) => entry.key(),
-			Vacant(ref entry) => entry.key(),
-		}
-	}
-
 	/// Provides in-place mutable access to an occupied entry before any
 	/// potential inserts into the map.
 	///
@@ -172,11 +179,11 @@ impl<'a, K, V> Entry<'a, K, V> {
 	}
 }
 
-impl<'a, K: fmt::Debug, V: fmt::Debug> fmt::Debug for Entry<'a, K, V> {
+impl<'a, K: fmt::Debug, V: fmt::Debug, C: Container<Node<K, V>>> fmt::Debug for Entry<'a, K, V, C> {
 	#[inline]
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
-			Occupied(entry) =>  entry.fmt(f),
+			Occupied(entry) => entry.fmt(f),
 			Vacant(entry) => entry.fmt(f)
 		}
 	}
@@ -184,13 +191,13 @@ impl<'a, K: fmt::Debug, V: fmt::Debug> fmt::Debug for Entry<'a, K, V> {
 
 /// A view into a vacant entry in a [`BTreeMap`].
 /// It is part of the [`Entry`] enum.
-pub struct VacantEntry<'a, K, V> {
-	map: &'a mut BTreeMap<K, V>,
+pub struct VacantEntry<'a, K, V, C = Slab<Node<K, V>>> {
+	map: &'a mut BTreeMap<K, V, C>,
 	key: K,
 	addr: ItemAddr
 }
 
-impl<'a, K, V> VacantEntry<'a, K, V> {
+impl<'a, K, V, C: Container<Node<K, V>>> VacantEntry<'a, K, V, C> {
 	/// Gets the address of the vacant entry in the B-Tree.
 	#[inline]
 	pub fn address(&self) -> ItemAddr {
@@ -228,7 +235,9 @@ impl<'a, K, V> VacantEntry<'a, K, V> {
 	pub fn into_key(self) -> K {
 		self.key
 	}
+}
 
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> VacantEntry<'a, K, V, C> {
 	/// Sets the value of the entry with the `VacantEntry`'s key,
 	/// and returns a mutable reference to it.
 	///
@@ -251,7 +260,7 @@ impl<'a, K, V> VacantEntry<'a, K, V> {
 	}
 }
 
-impl<'a, K: fmt::Debug, V> fmt::Debug for VacantEntry<'a, K, V> {
+impl<'a, K: fmt::Debug, V, C: Container<Node<K, V>>> fmt::Debug for VacantEntry<'a, K, V, C> {
 	#[inline]
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		f.debug_tuple("VacantEntry").field(self.key()).finish()
@@ -260,12 +269,12 @@ impl<'a, K: fmt::Debug, V> fmt::Debug for VacantEntry<'a, K, V> {
 
 /// A view into an occupied entry in a [`BTreeMap`].
 /// It is part of the [`Entry`] enum.
-pub struct OccupiedEntry<'a, K, V> {
-	map: &'a mut BTreeMap<K, V>,
+pub struct OccupiedEntry<'a, K, V, C = Slab<Node<K, V>>> {
+	map: &'a mut BTreeMap<K, V, C>,
 	addr: ItemAddr
 }
 
-impl<'a, K, V> OccupiedEntry<'a, K, V> {
+impl<'a, K, V, C: Container<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	/// Gets the address of the occupied entry in the B-Tree.
 	#[inline]
 	pub fn address(&self) -> ItemAddr {
@@ -291,6 +300,23 @@ impl<'a, K, V> OccupiedEntry<'a, K, V> {
 		self.map.item(self.addr).unwrap().value()
 	}
 
+	/// Gets a reference to the key in the entry.
+	///
+	/// # Example
+	/// ```
+	/// use linear_btree::BTreeMap;
+	///
+	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
+	/// map.entry("poneyland").or_insert(12);
+	/// assert_eq!(map.entry("poneyland").key(), &"poneyland");
+	/// ```
+	#[inline]
+	pub fn key(&self) -> &K {
+		self.map.item(self.addr).unwrap().key()
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	/// Gets a mutable reference to the value in the entry.
 	///
 	/// If you need a reference to the OccupiedEntry that may outlive
@@ -366,21 +392,6 @@ impl<'a, K, V> OccupiedEntry<'a, K, V> {
 		self.map.item_mut(self.addr).unwrap().value_mut()
 	}
 
-	/// Gets a reference to the key in the entry.
-	///
-	/// # Example
-	/// ```
-	/// use linear_btree::BTreeMap;
-	///
-	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
-	/// map.entry("poneyland").or_insert(12);
-	/// assert_eq!(map.entry("poneyland").key(), &"poneyland");
-	/// ```
-	#[inline]
-	pub fn key(&self) -> &K {
-		self.map.item(self.addr).unwrap().key()
-	}
-
 	/// Takes the value of the entry out of the map, and returns it.
 	///
 	/// # Examples
@@ -427,7 +438,7 @@ impl<'a, K, V> OccupiedEntry<'a, K, V> {
 	}
 }
 
-impl<'a, K: fmt::Debug, V: fmt::Debug> fmt::Debug for OccupiedEntry<'a, K, V> {
+impl<'a, K: fmt::Debug, V: fmt::Debug, C: Container<Node<K, V>>> fmt::Debug for OccupiedEntry<'a, K, V, C> {
 	#[inline]
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		f.debug_struct("OccupiedEntry").field("key", self.key()).field("value", self.get()).finish()
