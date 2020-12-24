@@ -1,13 +1,13 @@
-use std::cmp::{
-	PartialOrd,
-	Ord,
-	Ordering
+use std::{
+	borrow::Borrow,
+	cmp::Ordering
 };
 use staticvec::StaticVec;
 use crate::{
 	map::M,
 	node::{
 		Item,
+		Keyed,
 		Children,
 		ChildrenWithSeparators,
 		Balance,
@@ -29,34 +29,43 @@ impl<K, V> AsRef<Item<K, V>> for Branch<K, V> {
 	}
 }
 
-impl<K, V, T: PartialEq<K>> PartialEq<T> for Branch<K, V> {
-	fn eq(&self, other: &T) -> bool {
-		other.eq(self.item.key())
+impl<K, V> Keyed for Branch<K, V> {
+	type Key = K;
+
+	#[inline]
+	fn key(&self) -> &K {
+		self.item.key()
 	}
 }
 
-impl<K, V, T: PartialOrd<K>> PartialOrd<T> for Branch<K, V> {
-	fn partial_cmp(&self, other: &T) -> Option<Ordering> {
-		match other.partial_cmp(self.item.key()) {
-			Some(Ordering::Greater) => Some(Ordering::Less),
-			Some(Ordering::Less) => Some(Ordering::Greater),
-			Some(Ordering::Equal) => Some(Ordering::Equal),
-			None => None
-		}
+// impl<K, V, T: PartialEq<K>> PartialEq<T> for Branch<K, V> {
+// 	fn eq(&self, other: &T) -> bool {
+// 		other.eq(self.item.key())
+// 	}
+// }
+
+// impl<K, V, T: PartialOrd<K>> PartialOrd<T> for Branch<K, V> {
+// 	fn partial_cmp(&self, other: &T) -> Option<Ordering> {
+// 		match other.partial_cmp(self.item.key()) {
+// 			Some(Ordering::Greater) => Some(Ordering::Less),
+// 			Some(Ordering::Less) => Some(Ordering::Greater),
+// 			Some(Ordering::Equal) => Some(Ordering::Equal),
+// 			None => None
+// 		}
+// 	}
+// }
+
+impl<K: PartialEq, V> PartialEq for Branch<K, V> {
+	fn eq(&self, other: &Branch<K, V>) -> bool {
+		self.item.key().eq(other.item.key())
 	}
 }
 
-// impl<K: PartialEq, V> PartialEq for Branch<K, V> {
-// 	fn eq(&self, other: &Branch<K, V>) -> bool {
-// 		self.item.key().eq(other.item.key())
-// 	}
-// }
-//
-// impl<K: Ord + PartialEq, V> PartialOrd for Branch<K, V> {
-// 	fn partial_cmp(&self, other: &Branch<K, V>) -> Option<Ordering> {
-// 		Some(self.item.key().cmp(other.item.key()))
-// 	}
-// }
+impl<K: Ord + PartialEq, V> PartialOrd for Branch<K, V> {
+	fn partial_cmp(&self, other: &Branch<K, V>) -> Option<Ordering> {
+		Some(self.item.key().cmp(other.item.key()))
+	}
+}
 
 pub struct Internal<K, V> {
 	parent: usize,
@@ -186,11 +195,11 @@ impl<K, V> Internal<K, V> {
 	}
 
 	#[inline]
-	pub fn get(&self, key: &K) -> Result<&V, usize> where K: Ord {
+	pub fn get<Q: ?Sized>(&self, key: &Q) -> Result<&V, usize> where K: Borrow<Q>, Q: Ord {
 		match binary_search_min(&self.other_children, key) {
 			Some(offset) => {
 				let b = &self.other_children[offset];
-				if b.item.key() == key {
+				if b.item.key().borrow() == key {
 					Ok(b.item.value())
 				} else {
 					Err(b.child)
@@ -201,11 +210,11 @@ impl<K, V> Internal<K, V> {
 	}
 
 	#[inline]
-	pub fn get_mut(&mut self, key: &K) -> Result<&mut V, usize> where K: Ord {
+	pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Result<&mut V, usize> where K: Borrow<Q>, Q: Ord {
 		match binary_search_min(&self.other_children, key) {
 			Some(offset) => {
 				let b = &mut self.other_children[offset];
-				if b.item.key() == key {
+				if b.item.key().borrow() == key {
 					Ok(b.item.value_mut())
 				} else {
 					Err(b.child)
@@ -220,10 +229,10 @@ impl<K, V> Internal<K, V> {
 	/// If the key matches no item in this node,
 	/// this funtion returns the index and id of the child that may match the key.
 	#[inline]
-	pub fn offset_of(&self, key: &K) -> Result<usize, (usize, usize)> where K: Ord {
+	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<usize, (usize, usize)> where K: Borrow<Q>, Q: Ord {
 		match binary_search_min(&self.other_children, key) {
 			Some(offset) => {
-				if self.other_children[offset].item.key() == key {
+				if self.other_children[offset].item.key().borrow() == key {
 					Ok(offset)
 				} else {
 					let id = self.other_children[offset].child;

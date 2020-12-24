@@ -1,4 +1,7 @@
-use std::mem::MaybeUninit;
+use std::{
+	mem::MaybeUninit,
+	borrow::Borrow
+};
 use staticvec::StaticVec;
 use crate::{
 	map::{
@@ -31,7 +34,7 @@ pub trait BTreeExt<K, V> {
 	/// Panics if `id` is out of bounds.
 	fn node(&self, id: usize) -> &Node<K, V>;
 
-	fn get_in(&self, key: &K, id: usize) -> Option<&V> where K: Ord;
+	fn get_in<Q: ?Sized>(&self, key: &Q, id: usize) -> Option<&V> where K: Borrow<Q>, Q: Ord;
 
 	fn item(&self, addr: ItemAddr) -> Option<&Item<K, V>>;
 
@@ -47,9 +50,9 @@ pub trait BTreeExt<K, V> {
 
 	fn next_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
 
-	fn address_of(&self, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord;
+	fn address_of<Q: ?Sized>(&self, key: &Q) -> Result<ItemAddr, ItemAddr> where K: Borrow<Q>, Q: Ord;
 
-	fn address_in(&self, id: usize, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord;
+	fn address_in<Q: ?Sized>(&self, id: usize, key: &Q) -> Result<ItemAddr, ItemAddr> where K: Borrow<Q>, Q: Ord;
 
 	/// Validate the tree.
 	///
@@ -117,7 +120,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	}
 
 	#[inline]
-	fn get_in(&self, key: &K, mut id: usize) -> Option<&V> where K: Ord {
+	fn get_in<Q: ?Sized>(&self, key: &Q, mut id: usize) -> Option<&V> where K: Borrow<Q>, Q: Ord {
 		loop {
 			match self.node(id).get(key) {
 				Ok(value_opt) => return value_opt,
@@ -278,14 +281,14 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		}
 	}
 
-	fn address_of(&self, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord {
+	fn address_of<Q: ?Sized>(&self, key: &Q) -> Result<ItemAddr, ItemAddr> where K: Borrow<Q>, Q: Ord {
 		match self.root {
 			Some(id) => self.address_in(id, key),
 			None => Err(ItemAddr::nowhere())
 		}
 	}
 
-	fn address_in(&self, mut id: usize, key: &K) -> Result<ItemAddr, ItemAddr> where K: Ord {
+	fn address_in<Q: ?Sized>(&self, mut id: usize, key: &Q) -> Result<ItemAddr, ItemAddr> where K: Borrow<Q>, Q: Ord {
 		loop {
 			match self.node(id).offset_of(key) {
 				Ok(offset) => {

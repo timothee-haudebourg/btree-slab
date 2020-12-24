@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 mod item;
 mod addr;
 mod leaf;
@@ -7,6 +9,12 @@ pub use item::Item;
 pub use addr::ItemAddr;
 pub use leaf::Leaf as LeafNode;
 pub use internal::Internal as InternalNode;
+
+pub(crate) trait Keyed {
+	type Key;
+
+	fn key(&self) -> &Self::Key;
+}
 
 #[derive(Debug)]
 pub enum Balance {
@@ -118,7 +126,7 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn get(&self, key: &K) -> Result<Option<&V>, usize> where K: Ord {
+	pub fn get<Q: ?Sized>(&self, key: &Q) -> Result<Option<&V>, usize> where K: Borrow<Q>, Q: Ord {
 		match self {
 			Node::Leaf(leaf) => Ok(leaf.get(key)),
 			Node::Internal(node) => match node.get(key) {
@@ -129,7 +137,7 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn get_mut(&mut self, key: &K) -> Result<Option<&mut V>, usize> where K: Ord {
+	pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Result<Option<&mut V>, usize> where K: Borrow<Q>, Q: Ord {
 		match self {
 			Node::Leaf(leaf) => Ok(leaf.get_mut(key)),
 			Node::Internal(node) => match node.get_mut(key) {
@@ -145,7 +153,7 @@ impl<K, V> Node<K, V> {
 	/// this funtion returns the index and id of the child that may match the key,
 	/// or `Err(None)` if it is a leaf.
 	#[inline]
-	pub fn offset_of(&self, key: &K) -> Result<usize, (usize, Option<usize>)> where K: Ord {
+	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<usize, (usize, Option<usize>)> where K: Borrow<Q>, Q: Ord {
 		match self {
 			Node::Internal(node) => match node.offset_of(key) {
 				Ok(i) => Ok(i),

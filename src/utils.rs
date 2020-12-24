@@ -1,32 +1,35 @@
+use std::borrow::Borrow;
+use crate::node::Keyed;
+
 /// Search in `vec` for the item with the nearest key smaller or equal to the given one.
 ///
 /// `vec` is assumed to be sorted.
 #[inline]
-pub fn binary_search_min<T, K>(vec: &[T], key: &K) -> Option<usize> where T: PartialOrd<K> {
-	if vec.is_empty() || &vec[0] > key {
+pub(crate) fn binary_search_min<T: Keyed, Q: ?Sized>(vec: &[T], key: &Q) -> Option<usize> where T::Key: Borrow<Q>, Q: Ord {
+	if vec.is_empty() || vec[0].key().borrow() > key {
 		None
 	} else {
 		let mut i = 0;
 		let mut j = vec.len() - 1;
 
-		if &vec[j] <= key {
+		if vec[j].key().borrow() <= key {
 			return Some(j)
 		}
 
 		// invariants:
-		// vec[i] <= key
-		// vec[j] > key
+		// vec[i].key <= key
+		// vec[j].key > key
 		// j > i
 
 		while j-i > 1 {
 			let k = (i + j) / 2;
 
-			if &vec[k] > key {
+			if vec[k].key().borrow() > key {
 				j = k;
-				// vec[k] > key --> vec[j] > key
+				// vec[k].key > key --> vec[j] > key
 			} else {
 				i = k;
-				// vec[k] <= key --> vec[i] <= key
+				// vec[k].key <= key --> vec[i] <= key
 			}
 		}
 

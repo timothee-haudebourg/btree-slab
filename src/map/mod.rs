@@ -1,6 +1,9 @@
+use std::{
+	borrow::Borrow,
+	marker::PhantomData,
+	ops::Index
+};
 use slab::Slab;
-
-use std::marker::PhantomData;
 use crate::{
 	node::{
 		Item,
@@ -34,7 +37,7 @@ pub const M: usize = 8;
 /// # Basic usage
 /// Basic usage is similar to the map data structures offered by the standard library.
 /// ```
-/// use linear_btree::BTreeMap;
+/// use local_btree::BTreeMap;
 ///
 /// // type inference lets us omit an explicit type signature (which
 /// // would be `BTreeMap<&str, &str>` in this example).
@@ -78,11 +81,11 @@ pub const M: usize = 8;
 /// which allows for more complex methods of getting, setting, updating and removing keys and
 /// their values:
 /// ```
-/// use linear_btree::BTreeMap;
+/// use local_btree::BTreeMap;
 ///
 /// // type inference lets us omit an explicit type signature (which
 /// // would be `BTreeMap<&str, u8>` in this example).
-/// let mut player_stats = BTreeMap::new();
+/// let mut player_stats: BTreeMap<&str, u8> = BTreeMap::new();
 ///
 /// fn random_stat_buff() -> u8 {
 ///     // could actually return some random value here - let's just return
@@ -147,16 +150,79 @@ impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
 		self.len
 	}
 
+	/// Returns the key-value pair corresponding to the supplied key.
+	///
+	/// The supplied key may be any borrowed form of the map's key type, but the ordering
+	/// on the borrowed form *must* match the ordering on the key type.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map: BTreeMap<i32, &str> = BTreeMap::new();
+	/// map.insert(1, "a");
+	/// assert_eq!(map.get_key_value(&1), Some((&1, &"a")));
+	/// assert_eq!(map.get_key_value(&2), None);
+	/// ```
 	#[inline]
-	pub fn get(&self, key: &K) -> Option<&V> where K: Ord {
+	pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V> where K: Borrow<Q>, Q: Ord {
 		match self.root {
 			Some(id) => self.get_in(key, id),
 			None => None
 		}
 	}
 
+	/// Returns the key-value pair corresponding to the supplied key.
+	///
+	/// The supplied key may be any borrowed form of the map's key type, but the ordering
+	/// on the borrowed form *must* match the ordering on the key type.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use std::collections::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(1, "a");
+	/// assert_eq!(map.get_key_value(&1), Some((&1, &"a")));
+	/// assert_eq!(map.get_key_value(&2), None);
+	/// ```
+	pub fn get_key_value<Q: ?Sized>(&self, k: &Q) -> Option<(&K, &V)>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
+		match self.address_of(k) {
+			Ok(addr) => {
+				let item = self.item(addr).unwrap();
+				Some((item.key(), item.value()))
+			},
+			Err(_) => None
+		}
+	}
+
 	#[inline]
-	pub fn contains(&self, key: &K) -> bool where K: Ord {
+	pub fn iter(&self) -> Iter<K, V, C> {
+		Iter::new(self)
+	}
+
+	/// Returns `true` if the map contains a value for the specified key.
+	///
+	/// The key may be any borrowed form of the map's key type, but the ordering
+	/// on the borrowed form *must* match the ordering on the key type.
+	///
+	/// # Example
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map: BTreeMap<i32, &str> = BTreeMap::new();
+	/// map.insert(1, "a");
+	/// assert_eq!(map.contains_key(&1), true);
+	/// assert_eq!(map.contains_key(&2), false);
+	/// ```
+	#[inline]
+	pub fn contains_key<Q: ?Sized>(&self, key: &Q) -> bool where K: Borrow<Q>, Q: Ord {
 		self.get(key).is_some()
 	}
 
@@ -210,6 +276,44 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 		}
 	}
 
+	/// Gets the given key's corresponding entry in the map for in-place manipulation.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut letters = BTreeMap::new();
+	///
+	/// for ch in "a short treatise on fungi".chars() {
+	///     let counter = letters.entry(ch).or_insert(0);
+	///     *counter += 1;
+	/// }
+	///
+	/// assert_eq!(letters[&'s'], 2);
+	/// assert_eq!(letters[&'t'], 3);
+	/// assert_eq!(letters[&'u'], 1);
+	/// assert_eq!(letters.get(&'y'), None);
+	/// ```
+	#[inline]
+	pub fn entry(&mut self, key: K) -> Entry<K, V, C> where K: Ord {
+		match self.address_of(&key) {
+			Ok(addr) => {
+				Entry::Occupied(OccupiedEntry {
+					map: self,
+					addr
+				})
+			},
+			Err(addr) => {
+				Entry::Vacant(VacantEntry {
+					map: self,
+					key,
+					addr
+				})
+			}
+		}
+	}
+
 	/// Insert a key-value pair in the tree.
 	#[inline]
 	pub fn insert(&mut self, key: K, value: V) -> Option<V> where K: Ord {
@@ -226,7 +330,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 
 	// Delete an item by key.
 	#[inline]
-	pub fn remove(&mut self, key: &K) -> Option<V> where K: Ord {
+	pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V> where K: Borrow<Q>, Q: Ord {
 		match self.address_of(key) {
 			Ok(addr) => {
 				let (item, _) = self.remove_at(addr).unwrap();
@@ -410,6 +514,66 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 	}
 }
 
+impl<K: Ord, Q: ?Sized, V> Index<&Q> for BTreeMap<K, V>
+where
+	K: Borrow<Q>,
+	Q: Ord,
+{
+	type Output = V;
+
+	/// Returns a reference to the value corresponding to the supplied key.
+	///
+	/// # Panics
+	///
+	/// Panics if the key is not present in the `BTreeMap`.
+	#[inline]
+	fn index(&self, key: &Q) -> &V {
+		self.get(key).expect("no entry found for key")
+	}
+}
+
+pub struct Iter<'a, K, V, C: Container<Node<K, V>> = Slab<Node<K, V>>> {
+	/// The tree reference.
+	btree: &'a BTreeMap<K, V, C>,
+
+	/// Address of the next item.
+	addr: ItemAddr
+}
+
+impl<'a, K, V, C: Container<Node<K, V>>> Iter<'a, K, V, C> {
+	pub fn new(btree: &'a BTreeMap<K, V, C>) -> Self {
+		let addr = btree.first_address();
+		Iter {
+			btree,
+			addr
+		}
+	}
+}
+
+impl<'a, K, V, C: Container<Node<K, V>>> Iterator for Iter<'a, K, V, C> {
+	type Item = (&'a K, &'a V);
+
+	fn next(&mut self) -> Option<(&'a K, &'a V)> {
+		let after_addr = self.btree.next_address(self.addr);
+		match self.btree.item(self.addr) {
+			Some(item) => {
+				self.addr = after_addr.unwrap();
+				Some((item.key(), item.value()))
+			},
+			None => None
+		}
+	}
+}
+
+impl<'a, K, V, C: Container<Node<K, V>>> IntoIterator for &'a BTreeMap<K, V, C> {
+	type IntoIter = Iter<'a, K, V, C>;
+	type Item = (&'a K, &'a V);
+
+	fn into_iter(self) -> Iter<'a, K, V, C> {
+		self.iter()
+	}
+}
+
 /// Iterator that can mutate the tree in place.
 pub struct IterMut<'a, K, V, C = Slab<Node<K, V>>> {
 	/// The tree reference.
@@ -473,3 +637,50 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 		}
 	}
 }
+
+// enum CurrentNode<K, V> {
+// 	Leaf(StaticVecIntoIter<Item<K, V>, {M+1}>),
+// 	Internal(StaticVecIntoIter<crate::node::internal::Branch<K, V>, M>)
+// }
+
+// pub struct IntoIter<K, V, C: Container<Node<K, V>> = Slab<Node<K, V>>> {
+// 	/// The tree reference.
+// 	btree: BTreeMap<K, V, C>,
+
+// 	/// Current node.
+// 	current_node: Option<CurrentNode<K, V>>,
+
+// 	/// Id of the next node.
+// 	next: usize
+// }
+
+// impl<K, V, C: Container<Node<K, V>>> Iterator for IntoIter<K, V, C> {
+// 	type Item = (K, V);
+
+// 	fn next(&mut self) -> Option<(K, V)> {
+// 		match &mut self.current_node {
+// 			Some(node) => {
+// 				let item = node.item(self.current_offset).unwrap();
+// 			},
+// 			None => None
+// 		}
+
+// 		// let after_addr = self.btree.next_address(self.addr);
+// 		// match self.btree.item(self.addr) {
+// 		// 	Some(item) => {
+// 		// 		self.addr = after_addr.unwrap();
+// 		// 		Some((item.key(), item.value()))
+// 		// 	},
+// 		// 	None => None
+// 		// }
+// 	}
+// }
+
+// impl<K, V, C: Container<Node<K, V>>> IntoIterator for BTreeMap<K, V, C> {
+// 	type IntoIter = IntoIter<K, V, C>;
+// 	type Item = (K, V);
+
+// 	fn into_iter(self) -> IntoIter<K, V, C> {
+// 		self.into_iter()
+// 	}
+// }

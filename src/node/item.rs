@@ -1,10 +1,8 @@
 use std::{
 	mem::MaybeUninit,
-	cmp::{
-		PartialOrd,
-		Ordering
-	}
+	cmp::Ordering
 };
+use super::Keyed;
 
 pub struct Item<K, V> {
 	key: MaybeUninit<K>,
@@ -107,31 +105,40 @@ impl<K, V> Drop for Item<K, V> {
 	}
 }
 
-impl<K, V, T: PartialEq<K>> PartialEq<T> for Item<K, V> {
-	fn eq(&self, other: &T) -> bool {
-		other.eq(self.key())
+impl<K, V> Keyed for Item<K, V> {
+	type Key = K;
+
+	#[inline]
+	fn key(&self) -> &K {
+		self.key()
 	}
 }
 
-impl<K, V, T: PartialOrd<K>> PartialOrd<T> for Item<K, V> {
-	fn partial_cmp(&self, other: &T) -> Option<Ordering> {
-		match other.partial_cmp(self.key()) {
-			Some(Ordering::Greater) => Some(Ordering::Less),
-			Some(Ordering::Less) => Some(Ordering::Greater),
-			Some(Ordering::Equal) => Some(Ordering::Equal),
-			None => None
-		}
+// impl<K, V, T: PartialEq<K>> PartialEq<T> for Item<K, V> {
+// 	fn eq(&self, other: &T) -> bool {
+// 		other.eq(self.key())
+// 	}
+// }
+
+// impl<K, V, T: PartialOrd<K>> PartialOrd<T> for Item<K, V> {
+// 	fn partial_cmp(&self, other: &T) -> Option<Ordering> {
+// 		match other.partial_cmp(self.key()) {
+// 			Some(Ordering::Greater) => Some(Ordering::Less),
+// 			Some(Ordering::Less) => Some(Ordering::Greater),
+// 			Some(Ordering::Equal) => Some(Ordering::Equal),
+// 			None => None
+// 		}
+// 	}
+// }
+
+impl<K: PartialEq, V> PartialEq for Item<K, V> {
+	fn eq(&self, other: &Item<K, V>) -> bool {
+		self.key().eq(other.key())
 	}
 }
 
-// impl<K: PartialEq, V> PartialEq for Item<K, V> {
-// 	fn eq(&self, other: &Item<K, V>) -> bool {
-// 		self.key().eq(other.key())
-// 	}
-// }
-//
-// impl<K: Ord + PartialEq, V> PartialOrd for Item<K, V> {
-// 	fn partial_cmp(&self, other: &Item<K, V>) -> Option<Ordering> {
-// 		Some(self.key().cmp(other.key()))
-// 	}
-// }
+impl<K: Ord + PartialEq, V> PartialOrd for Item<K, V> {
+	fn partial_cmp(&self, other: &Item<K, V>) -> Option<Ordering> {
+		Some(self.key().cmp(other.key()))
+	}
+}

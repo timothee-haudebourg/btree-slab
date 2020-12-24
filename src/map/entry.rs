@@ -40,7 +40,7 @@ impl<'a, K, V, C: Container<Node<K, V>>> Entry<'a, K, V, C> {
 	/// # Examples
 	///
 	/// ```
-	/// use linear_btree::BTreeMap;
+	/// use local_btree::BTreeMap;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// assert_eq!(map.entry("poneyland").key(), &"poneyland");
@@ -61,7 +61,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> Entry<'a, K, V, C> {
 	/// # Examples
 	///
 	/// ```
-	/// use linear_btree::BTreeMap;
+	/// use local_btree::BTreeMap;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -82,7 +82,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> Entry<'a, K, V, C> {
 	/// # Examples
 	///
 	/// ```
-	/// use linear_btree::BTreeMap;
+	/// use local_btree::BTreeMap;
 	///
 	/// let mut map: BTreeMap<&str, String> = BTreeMap::new();
 	/// let s = "hoho".to_string();
@@ -107,7 +107,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> Entry<'a, K, V, C> {
 	///
 	/// ```
 	/// #![feature(or_insert_with_key)]
-	/// use linear_btree::BTreeMap;
+	/// use local_btree::BTreeMap;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	///
@@ -132,7 +132,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> Entry<'a, K, V, C> {
 	/// # Examples
 	///
 	/// ```
-	/// use linear_btree::BTreeMap;
+	/// use local_btree::BTreeMap;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	///
@@ -163,7 +163,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> Entry<'a, K, V, C> {
 	/// # Examples
 	///
 	/// ```
-	/// use linear_btree::BTreeMap;
+	/// use local_btree::BTreeMap;
 	///
 	/// let mut map: BTreeMap<&str, Option<usize>> = BTreeMap::new();
 	/// map.entry("poneyland").or_default();
@@ -192,9 +192,9 @@ impl<'a, K: fmt::Debug, V: fmt::Debug, C: Container<Node<K, V>>> fmt::Debug for 
 /// A view into a vacant entry in a [`BTreeMap`].
 /// It is part of the [`Entry`] enum.
 pub struct VacantEntry<'a, K, V, C = Slab<Node<K, V>>> {
-	map: &'a mut BTreeMap<K, V, C>,
-	key: K,
-	addr: ItemAddr
+	pub(crate) map: &'a mut BTreeMap<K, V, C>,
+	pub(crate) key: K,
+	pub(crate) addr: ItemAddr
 }
 
 impl<'a, K, V, C: Container<Node<K, V>>> VacantEntry<'a, K, V, C> {
@@ -208,7 +208,7 @@ impl<'a, K, V, C: Container<Node<K, V>>> VacantEntry<'a, K, V, C> {
 	///
 	/// ## Example
 	/// ```
-	/// use linear_btree::BTreeMap;
+	/// use local_btree::BTreeMap;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// assert_eq!(map.entry("poneyland").key(), &"poneyland");
@@ -222,8 +222,8 @@ impl<'a, K, V, C: Container<Node<K, V>>> VacantEntry<'a, K, V, C> {
 	///
 	/// ## Example
 	/// ```
-	/// linear_btree::BTreeMap;
-	/// linear_btree::map::Entry;
+	/// use local_btree::BTreeMap;
+	/// use local_btree::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	///
@@ -243,8 +243,8 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> VacantEntry<'a, K, V, C> {
 	///
 	/// ## Example
 	/// ```
-	/// use linear_btree::BTreeMap;
-	/// use linear_btree::map::Entry;
+	/// use local_btree::BTreeMap;
+	/// use local_btree::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, u32> = BTreeMap::new();
 	///
@@ -270,8 +270,8 @@ impl<'a, K: fmt::Debug, V, C: Container<Node<K, V>>> fmt::Debug for VacantEntry<
 /// A view into an occupied entry in a [`BTreeMap`].
 /// It is part of the [`Entry`] enum.
 pub struct OccupiedEntry<'a, K, V, C = Slab<Node<K, V>>> {
-	map: &'a mut BTreeMap<K, V, C>,
-	addr: ItemAddr
+	pub(crate) map: &'a mut BTreeMap<K, V, C>,
+	pub(crate) addr: ItemAddr
 }
 
 impl<'a, K, V, C: Container<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
@@ -285,8 +285,8 @@ impl<'a, K, V, C: Container<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	///
 	/// # Example
 	/// ```
-	/// use linear_btree::BTreeMap;
-	/// use linear_btree::map::Entry;
+	/// use local_btree::BTreeMap;
+	/// use local_btree::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -304,7 +304,7 @@ impl<'a, K, V, C: Container<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	///
 	/// # Example
 	/// ```
-	/// use linear_btree::BTreeMap;
+	/// use local_btree::BTreeMap;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -324,8 +324,8 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	///
 	/// # Example
 	/// ```
-	/// use linear_btree::BTreeMap;
-	/// use linear_btree::map::Entry;
+	/// use local_btree::BTreeMap;
+	/// use local_btree::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -350,8 +350,8 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	///
 	/// # Example
 	/// ```
-	/// use linear_btree::BTreeMap;
-	/// use linear_btree::map::Entry;
+	/// use local_btree::BTreeMap;
+	/// use local_btree::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -375,8 +375,8 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use linear_btree::BTreeMap;
-	/// use linear_btree::map::Entry;
+	/// use local_btree::BTreeMap;
+	/// use local_btree::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -397,8 +397,8 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	/// # Examples
 	///
 	/// ```
-	/// use linear_btree::BTreeMap;
-	/// use linear_btree::map::Entry;
+	/// use local_btree::BTreeMap;
+	/// use local_btree::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -418,8 +418,8 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	///
 	/// # Example
 	/// ```
-	/// use linear_btree::BTreeMap;
-	/// use linear_btree::map::Entry;
+	/// use local_btree::BTreeMap;
+	/// use local_btree::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);

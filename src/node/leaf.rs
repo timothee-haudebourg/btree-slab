@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use staticvec::StaticVec;
 use crate::{
 	map::{
@@ -58,11 +59,11 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[inline]
-	pub fn get(&self, key: &K) -> Option<&V> where K: Ord {
+	pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V> where K: Borrow<Q>, Q: Ord {
 		match binary_search_min(&self.items, key) {
 			Some(i) => {
 				let item = &self.items[i];
-				if item.key() == key {
+				if item.key().borrow() == key {
 					Some(item.value())
 				} else {
 					None
@@ -73,11 +74,11 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[inline]
-	pub fn get_mut(&mut self, key: &K) -> Option<&mut V> where K: Ord {
+	pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V> where K: Borrow<Q>, Q: Ord {
 		match binary_search_min(&self.items, key) {
 			Some(i) => {
 				let item = &mut self.items[i];
-				if item.key() == key {
+				if item.key().borrow() == key {
 					Some(item.value_mut())
 				} else {
 					None
@@ -89,10 +90,10 @@ impl<K, V> Leaf<K, V> {
 
 	/// Find the offset of the item matching the given key.
 	#[inline]
-	pub fn offset_of(&self, key: &K) -> Result<usize, usize> where K: Ord {
+	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<usize, usize> where K: Borrow<Q>, Q: Ord {
 		match binary_search_min(&self.items, key) {
 			Some(i) => {
-				if self.items[i].key() == key {
+				if self.items[i].key().borrow() == key {
 					Ok(i)
 				} else {
 					Err(i+1)

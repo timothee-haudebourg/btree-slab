@@ -12,26 +12,6 @@ pub trait ContainerMut<T>: Container<T> {
 	fn remove(&mut self, id: usize) -> T;
 }
 
-impl<T> Container<T> for Slab<T> {
-	fn get(&self, id: usize) -> Option<&T> {
-		self.get(id)
-	}
-}
-
-impl<T> ContainerMut<T> for Slab<T> {
-	fn get_mut(&mut self, id: usize) -> Option<&mut T> {
-		self.get_mut(id)
-	}
-
-	fn insert(&mut self, t: T) -> usize {
-		self.insert(t)
-	}
-
-	fn remove(&mut self, id: usize) -> T {
-		self.remove(id)
-	}
-}
-
 impl<'a, T, C: Container<T>> Container<T> for &'a C {
 	fn get(&self, id: usize) -> Option<&T> {
 		C::get(*self, id)
@@ -55,5 +35,25 @@ impl<'a, T, C: ContainerMut<T>> ContainerMut<T> for &'a mut C {
 
 	fn remove(&mut self, id: usize) -> T {
 		C::remove(*self, id)
+	}
+}
+
+impl<T> Container<T> for Slab<T> {
+	fn get(&self, id: usize) -> Option<&T> {
+		self.get(id)
+	}
+}
+
+impl<T> ContainerMut<T> for Slab<T> {
+	fn get_mut(&mut self, id: usize) -> Option<&mut T> {
+		self.get_mut(id)
+	}
+
+	fn insert(&mut self, t: T) -> usize {
+		self.insert(t)
+	}
+
+	fn remove(&mut self, id: usize) -> T {
+		self.remove(id)
 	}
 }

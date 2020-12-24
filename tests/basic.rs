@@ -5,7 +5,7 @@ use rand::{
 	seq::SliceRandom,
 	rngs::SmallRng
 };
-use linear_btree::{
+use local_btree::{
 	BTreeMap,
 	map::{
 		BTreeExt,
