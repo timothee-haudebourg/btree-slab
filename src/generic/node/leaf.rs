@@ -1,13 +1,15 @@
 use std::borrow::Borrow;
 use staticvec::StaticVec;
 use crate::{
-	map::{
-		M,
-	},
-	node::{
-		Item,
-		Balance,
-		WouldUnderflow
+	generic::{
+		map::{
+			M,
+		},
+		node::{
+			Item,
+			Balance,
+			WouldUnderflow
+		}
 	},
 	utils::binary_search_min
 };

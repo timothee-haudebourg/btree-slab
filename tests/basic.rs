@@ -7,11 +7,13 @@ use rand::{
 };
 use local_btree::{
 	BTreeMap,
-	map::{
-		BTreeExt,
-		BTreeExtMut
-	},
-	node::Item
+	generic::{
+		map::{
+			BTreeExt,
+			BTreeExtMut
+		},
+		node::Item
+	}
 };
 
 const SEED: &'static [u8; 16] = b"testseedtestseed";

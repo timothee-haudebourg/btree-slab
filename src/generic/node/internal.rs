@@ -4,14 +4,16 @@ use std::{
 };
 use staticvec::StaticVec;
 use crate::{
-	map::M,
-	node::{
-		Item,
-		Keyed,
-		Children,
-		ChildrenWithSeparators,
-		Balance,
-		WouldUnderflow
+	generic::{
+		map::M,
+		node::{
+			Item,
+			Keyed,
+			Children,
+			ChildrenWithSeparators,
+			Balance,
+			WouldUnderflow
+		}
 	},
 	utils::binary_search_min
 };

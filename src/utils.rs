@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use crate::node::Keyed;
+use crate::generic::node::Keyed;
 
 /// Search in `vec` for the item with the nearest key smaller or equal to the given one.
 ///

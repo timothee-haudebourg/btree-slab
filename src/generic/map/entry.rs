@@ -1,15 +1,17 @@
 use std::fmt;
 use slab::Slab;
 use crate::{
-	map::{
-		BTreeMap,
-		BTreeExt,
-		BTreeExtMut
-	},
-	node::{
-		Node,
-		Item,
-		ItemAddr
+	generic::{
+		map::{
+			BTreeMap,
+			BTreeExt,
+			BTreeExtMut
+		},
+		node::{
+			Node,
+			Item,
+			ItemAddr
+		}
 	},
 	Container,
 	ContainerMut
@@ -223,7 +225,7 @@ impl<'a, K, V, C: Container<Node<K, V>>> VacantEntry<'a, K, V, C> {
 	/// ## Example
 	/// ```
 	/// use local_btree::BTreeMap;
-	/// use local_btree::map::Entry;
+	/// use local_btree::generic::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	///
@@ -244,7 +246,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> VacantEntry<'a, K, V, C> {
 	/// ## Example
 	/// ```
 	/// use local_btree::BTreeMap;
-	/// use local_btree::map::Entry;
+	/// use local_btree::generic::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, u32> = BTreeMap::new();
 	///
@@ -286,7 +288,7 @@ impl<'a, K, V, C: Container<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	/// # Example
 	/// ```
 	/// use local_btree::BTreeMap;
-	/// use local_btree::map::Entry;
+	/// use local_btree::generic::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -325,7 +327,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	/// # Example
 	/// ```
 	/// use local_btree::BTreeMap;
-	/// use local_btree::map::Entry;
+	/// use local_btree::generic::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -351,7 +353,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	/// # Example
 	/// ```
 	/// use local_btree::BTreeMap;
-	/// use local_btree::map::Entry;
+	/// use local_btree::generic::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -376,7 +378,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	///
 	/// ```
 	/// use local_btree::BTreeMap;
-	/// use local_btree::map::Entry;
+	/// use local_btree::generic::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -398,7 +400,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	///
 	/// ```
 	/// use local_btree::BTreeMap;
-	/// use local_btree::map::Entry;
+	/// use local_btree::generic::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);
@@ -419,7 +421,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	/// # Example
 	/// ```
 	/// use local_btree::BTreeMap;
-	/// use local_btree::map::Entry;
+	/// use local_btree::generic::map::Entry;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
 	/// map.entry("poneyland").or_insert(12);

@@ -4,15 +4,17 @@ use std::{
 };
 use staticvec::StaticVec;
 use crate::{
-	map::{
-		M,
-		BTreeMap
-	},
-	node::{
-		Node,
-		Balance,
-		Item,
-		ItemAddr
+	generic::{
+		map::{
+			M,
+			BTreeMap
+		},
+		node::{
+			Node,
+			Balance,
+			Item,
+			ItemAddr
+		}
 	},
 	Container,
 	ContainerMut

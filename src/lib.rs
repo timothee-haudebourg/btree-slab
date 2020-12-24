@@ -2,13 +2,16 @@
 #![feature(is_sorted)]
 #![feature(maybe_uninit_ref)]
 
+use slab::Slab;
+
 pub mod utils;
 mod container;
-pub mod node;
-pub mod map;
+pub mod generic;
 
 pub use container::{
 	Container,
 	ContainerMut
 };
-pub use map::BTreeMap;
+
+/// B-Tree based on `Slab`.
+pub type BTreeMap<K, V> = generic::BTreeMap<K, V, Slab<generic::Node<K, V>>>;

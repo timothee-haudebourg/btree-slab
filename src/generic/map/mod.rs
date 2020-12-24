@@ -5,12 +5,14 @@ use std::{
 };
 use slab::Slab;
 use crate::{
-	node::{
-		Item,
-		ItemAddr,
-		Node,
-		Balance,
-		WouldUnderflow
+	generic::{
+		node::{
+			Item,
+			ItemAddr,
+			Node,
+			Balance,
+			WouldUnderflow
+		}
 	},
 	Container,
 	ContainerMut
@@ -31,7 +33,7 @@ pub const M: usize = 8;
 ///
 /// This offers an alternative over the standard implementation of B-Trees where nodes are
 /// allocated in a contiguous array of [`Node`]s, reducing the cost of tree nodes allocations.
-/// In addition the crate provides advances functions to iterate through and update the map
+/// In addition the crate provides advanced functions to iterate through and update the map
 /// efficiently.
 ///
 /// # Basic usage
@@ -77,7 +79,7 @@ pub const M: usize = 8;
 /// ```
 ///
 /// # Entry API
-/// This crate also reproduces the [`Entry API`] defined by the standard library,
+/// This crate also reproduces the Entry API defined by the standard library,
 /// which allows for more complex methods of getting, setting, updating and removing keys and
 /// their values:
 /// ```
