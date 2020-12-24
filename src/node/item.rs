@@ -70,6 +70,16 @@ impl<K, V> Item<K, V> {
 	}
 
 	#[inline]
+	pub fn as_pair(&self) -> (&K, &V) {
+		unsafe { (self.key.assume_init_ref(), self.value.assume_init_ref()) }
+	}
+
+	#[inline]
+	pub fn as_pair_mut(&mut self) -> (&mut K, &mut V) {
+		unsafe { (self.key.assume_init_mut(), self.value.assume_init_mut()) }
+	}
+
+	#[inline]
 	pub fn into_pair(self) -> (K, V) {
 		let (key, value) = self.into_inner();
 		unsafe {

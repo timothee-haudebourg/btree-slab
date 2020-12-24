@@ -376,6 +376,11 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 		IterMut::new(self)
 	}
 
+	#[inline]
+	pub fn into_iter(self) -> IntoIter<K, V, C> {
+		IntoIter::new(self)
+	}
+
 	/// Try to rotate left the node `id` to benefits the child number `deficient_child_index`.
 	///
 	/// Returns true if the rotation succeeded, of false if the target child has no right sibling,
@@ -575,7 +580,7 @@ impl<'a, K, V, C: Container<Node<K, V>>> IntoIterator for &'a BTreeMap<K, V, C> 
 }
 
 /// Iterator that can mutate the tree in place.
-pub struct IterMut<'a, K, V, C = Slab<Node<K, V>>> {
+pub struct IterMut<'a, K: 'a, V: 'a, C = Slab<Node<K, V>>> {
 	/// The tree reference.
 	btree: &'a mut BTreeMap<K, V, C>,
 
@@ -583,7 +588,7 @@ pub struct IterMut<'a, K, V, C = Slab<Node<K, V>>> {
 	addr: ItemAddr
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
+impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	/// Create a new iterator over all the items of the map.
 	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> IterMut<'a, K, V, C> {
 		let addr = btree.first_address();
@@ -599,12 +604,12 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	}
 
 	/// Get the next item and move the iterator to the next position.
-	pub fn next(&'a mut self) -> Option<&'a mut Item<K, V>> {
+	pub fn next(&mut self) -> Option<&'a mut Item<K, V>> {
 		let after_addr = self.btree.next_address(self.addr);
 		match self.btree.item_mut(self.addr) {
-			Some(item) => {
+			Some(item) => unsafe {
 				self.addr = after_addr.unwrap();
-				Some(item)
+				Some(std::mem::transmute(item as *mut _)) // this is safe because only one mutable reference to the same item can be emitted.
 			},
 			None => None
 		}
@@ -638,49 +643,74 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	}
 }
 
-// enum CurrentNode<K, V> {
-// 	Leaf(StaticVecIntoIter<Item<K, V>, {M+1}>),
-// 	Internal(StaticVecIntoIter<crate::node::internal::Branch<K, V>, M>)
-// }
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for IterMut<'a, K, V, C> {
+	type Item = (&'a K, &'a mut V);
 
-// pub struct IntoIter<K, V, C: Container<Node<K, V>> = Slab<Node<K, V>>> {
-// 	/// The tree reference.
-// 	btree: BTreeMap<K, V, C>,
+	fn next(&mut self) -> Option<(&'a K, &'a mut V)> {
+		match self.next() {
+			Some(item) => {
+				let (key, value) = item.as_pair_mut();
+				Some((key, value)) // coerce k from `&mut K` to `&K`
+			},
+			None => None
+		}
+	}
+}
 
-// 	/// Current node.
-// 	current_node: Option<CurrentNode<K, V>>,
+/// An owning iterator over the entries of a `BTreeMap`.
+///
+/// This `struct` is created by the [`into_iter`] method on [`BTreeMap`]
+/// (provided by the `IntoIterator` trait). See its documentation for more.
+///
+/// [`into_iter`]: IntoIterator::into_iter
+pub struct IntoIter<K, V, C: ContainerMut<Node<K, V>> = Slab<Node<K, V>>> {
+	/// The tree reference.
+	btree: BTreeMap<K, V, C>,
 
-// 	/// Id of the next node.
-// 	next: usize
-// }
+	/// Address of the next item.
+	addr: ItemAddr
+}
 
-// impl<K, V, C: Container<Node<K, V>>> Iterator for IntoIter<K, V, C> {
-// 	type Item = (K, V);
+impl<K, V, C: ContainerMut<Node<K, V>>> IntoIter<K, V, C> {
+	pub fn new(btree: BTreeMap<K, V, C>) -> Self {
+		let addr = btree.first_address();
+		IntoIter {
+			btree,
+			addr
+		}
+	}
+}
 
-// 	fn next(&mut self) -> Option<(K, V)> {
-// 		match &mut self.current_node {
-// 			Some(node) => {
-// 				let item = node.item(self.current_offset).unwrap();
-// 			},
-// 			None => None
-// 		}
+impl<K, V, C: ContainerMut<Node<K, V>>> Iterator for IntoIter<K, V, C> {
+	type Item = (K, V);
 
-// 		// let after_addr = self.btree.next_address(self.addr);
-// 		// match self.btree.item(self.addr) {
-// 		// 	Some(item) => {
-// 		// 		self.addr = after_addr.unwrap();
-// 		// 		Some((item.key(), item.value()))
-// 		// 	},
-// 		// 	None => None
-// 		// }
-// 	}
-// }
+	fn next(&mut self) -> Option<(K, V)> {
+		if self.btree.item(self.addr).is_some() {
+			if self.addr.offset+1 >= self.btree.node(self.addr.id).item_count() {
+				// we have gove through every item of the node, we can release it.
+				let node = self.btree.release_node(self.addr.id);
+				std::mem::forget(node); // do not call `drop` on the node since items have been moved.
+			}
+	
+			let item = unsafe {
+				// this is safe because the item at `self.addr` exists and is never touched again.
+				std::ptr::read(self.btree.item(self.addr).unwrap())
+			};
 
-// impl<K, V, C: Container<Node<K, V>>> IntoIterator for BTreeMap<K, V, C> {
-// 	type IntoIter = IntoIter<K, V, C>;
-// 	type Item = (K, V);
+			self.addr = self.btree.next_address(self.addr).unwrap();
+	
+			Some(item.into_pair())
+		} else {
+			None
+		}
+	}
+}
 
-// 	fn into_iter(self) -> IntoIter<K, V, C> {
-// 		self.into_iter()
-// 	}
-// }
+impl<K, V, C: ContainerMut<Node<K, V>>> IntoIterator for BTreeMap<K, V, C> {
+	type IntoIter = IntoIter<K, V, C>;
+	type Item = (K, V);
+
+	fn into_iter(self) -> IntoIter<K, V, C> {
+		self.into_iter()
+	}
+}
