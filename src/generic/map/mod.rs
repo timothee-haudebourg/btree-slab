@@ -670,12 +670,12 @@ pub struct IntoIter<K, V, C: ContainerMut<Node<K, V>> = Slab<Node<K, V>>> {
 	btree: BTreeMap<K, V, C>,
 
 	/// Address of the next item.
-	addr: ItemAddr
+	addr: Option<ItemAddr>
 }
 
 impl<K, V, C: ContainerMut<Node<K, V>>> IntoIter<K, V, C> {
 	pub fn new(btree: BTreeMap<K, V, C>) -> Self {
-		let addr = btree.first_address();
+		let addr = btree.normalize(btree.first_address());
 		IntoIter {
 			btree,
 			addr
@@ -687,23 +687,34 @@ impl<K, V, C: ContainerMut<Node<K, V>>> Iterator for IntoIter<K, V, C> {
 	type Item = (K, V);
 
 	fn next(&mut self) -> Option<(K, V)> {
-		if self.btree.item(self.addr).is_some() {
-			if self.addr.offset+1 >= self.btree.node(self.addr.id).item_count() {
-				// we have gove through every item of the node, we can release it.
-				let node = self.btree.release_node(self.addr.id);
-				std::mem::forget(node); // do not call `drop` on the node since items have been moved.
-			}
-	
-			let item = unsafe {
-				// this is safe because the item at `self.addr` exists and is never touched again.
-				std::ptr::read(self.btree.item(self.addr).unwrap())
-			};
+		match self.addr {
+			Some(addr) => {
+				eprintln!("addr: {}", addr);
+				let item = unsafe {
+					// this is safe because the item at `self.addr` exists and is never touched again.
+					std::ptr::read(self.btree.item(addr).unwrap())
+				};
 
-			self.addr = self.btree.next_address(self.addr).unwrap();
-	
-			Some(item.into_pair())
-		} else {
-			None
+				let (next_addr, release) = match self.btree.next_address(addr) {
+					Some(next_addr) => {
+						let release = next_addr.offset == self.btree.node(addr.id).item_count();
+						(self.btree.normalize(next_addr), release)
+					},
+					None => (None, true)
+				};
+
+				if release {
+					eprintln!("release {}", addr.id);
+					// we have gove through every item of the node, we can release it.
+					let node = self.btree.release_node(addr.id);
+					std::mem::forget(node); // do not call `drop` on the node since items have been moved.
+				}
+
+				self.addr = next_addr;
+
+				Some(item.into_pair())
+			},
+			None => None
 		}
 	}
 }

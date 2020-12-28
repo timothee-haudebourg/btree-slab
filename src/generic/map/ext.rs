@@ -165,20 +165,24 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		}
 	}
 
-	/// Normalize an item address so that an out-of-node-bounds address points to the next item.
+	/// Normalizes the given item address so that an out-of-node-bounds address points to the next item.
 	fn normalize(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
-		loop {
-			let node = self.node(addr.id);
-			if addr.offset >= node.item_count() {
-				match node.parent() {
-					Some(parent_id) => {
-						addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
-						addr.id = parent_id;
-					},
-					None => return None
+		if addr.is_nowhere() {
+			None
+		} else {
+			loop {
+				let node = self.node(addr.id);
+				if addr.offset >= node.item_count() {
+					match node.parent() {
+						Some(parent_id) => {
+							addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+							addr.id = parent_id;
+						},
+						None => return None
+					}
+				} else {
+					return Some(addr)
 				}
-			} else {
-				return Some(addr)
 			}
 		}
 	}
@@ -237,6 +241,8 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	}
 
 	/// Get the address of the item located after this address.
+	/// 
+	/// The returned address is not normalized.
 	#[inline]
 	fn next_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
 		if addr.is_nowhere() {
