@@ -5,6 +5,22 @@ use std::{
 use local_btree::BTreeMap;
 
 #[test]
+pub fn iter() {
+	let mut map = BTreeMap::new();
+	for i in 0..10 {
+		map.insert(i, i);
+	}
+
+	let mut i = 0;
+	for (key, value) in &map {
+		assert_eq!(*key, i);
+		i += 1;
+	}
+
+	assert_eq!(i, 10)
+}
+
+#[test]
 pub fn into_iter() {
 	struct Element {
 		/// Drop counter.
@@ -34,7 +50,7 @@ pub fn into_iter() {
 
 	let counter = Rc::new(Cell::new(0));
 	let mut map = BTreeMap::new();
-	for i in 0..10 {
+	for i in 0..100 {
 		map.insert(i, Element::new(&counter, i));
 	}
 
@@ -42,5 +58,5 @@ pub fn into_iter() {
 		assert_eq!(key, value.inner());
 	}
 
-	assert_eq!(counter.get(), 10);
+	assert_eq!(counter.get(), 100);
 }

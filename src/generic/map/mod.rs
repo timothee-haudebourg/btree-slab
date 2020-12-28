@@ -544,12 +544,12 @@ pub struct Iter<'a, K, V, C: Container<Node<K, V>> = Slab<Node<K, V>>> {
 	btree: &'a BTreeMap<K, V, C>,
 
 	/// Address of the next item.
-	addr: ItemAddr
+	addr: Option<ItemAddr>
 }
 
 impl<'a, K, V, C: Container<Node<K, V>>> Iter<'a, K, V, C> {
 	pub fn new(btree: &'a BTreeMap<K, V, C>) -> Self {
-		let addr = btree.first_address();
+		let addr = btree.first_item_address();
 		Iter {
 			btree,
 			addr
@@ -561,10 +561,10 @@ impl<'a, K, V, C: Container<Node<K, V>>> Iterator for Iter<'a, K, V, C> {
 	type Item = (&'a K, &'a V);
 
 	fn next(&mut self) -> Option<(&'a K, &'a V)> {
-		let after_addr = self.btree.next_address(self.addr);
-		match self.btree.item(self.addr) {
-			Some(item) => {
-				self.addr = after_addr.unwrap();
+		match self.addr {
+			Some(addr) => {
+				let item = self.btree.item(addr).unwrap();
+				self.addr = self.btree.next_item_address(addr);
 				Some((item.key(), item.value()))
 			},
 			None => None
@@ -586,14 +586,14 @@ pub struct IterMut<'a, K: 'a, V: 'a, C = Slab<Node<K, V>>> {
 	/// The tree reference.
 	btree: &'a mut BTreeMap<K, V, C>,
 
-	/// Address of the next item.
+	/// Address of the next item, or last valid address.
 	addr: ItemAddr
 }
 
 impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	/// Create a new iterator over all the items of the map.
 	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> IterMut<'a, K, V, C> {
-		let addr = btree.first_address();
+		let addr = btree.first_valid_address();
 		IterMut {
 			btree,
 			addr
@@ -607,7 +607,7 @@ impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 
 	/// Get the next item and move the iterator to the next position.
 	pub fn next(&mut self) -> Option<&'a mut Item<K, V>> {
-		let after_addr = self.btree.next_address(self.addr);
+		let after_addr = self.btree.next_item_or_last_valid_address(self.addr);
 		match self.btree.item_mut(self.addr) {
 			Some(item) => unsafe {
 				self.addr = after_addr.unwrap();
@@ -630,7 +630,7 @@ impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	/// (invalidate the specification of every method of the API).
 	pub fn insert(&mut self, key: K, value: V) {
 		let addr = self.btree.insert_at(self.addr, Item::new(key, value));
-		self.addr = self.btree.next_address(addr).unwrap();
+		self.btree.next_item_or_last_valid_address(addr);
 	}
 
 	/// Remove the next item and return it.
@@ -669,52 +669,123 @@ pub struct IntoIter<K, V, C: ContainerMut<Node<K, V>> = Slab<Node<K, V>>> {
 	/// The tree reference.
 	btree: BTreeMap<K, V, C>,
 
-	/// Address of the next item.
-	addr: Option<ItemAddr>
+	/// Address of the next item, or the last valid address.
+	addr: ItemAddr,
+
+	/// Address following the last item.
+	end: ItemAddr,
+
+	/// Number of remaining items.
+	len: usize
 }
 
 impl<K, V, C: ContainerMut<Node<K, V>>> IntoIter<K, V, C> {
 	pub fn new(btree: BTreeMap<K, V, C>) -> Self {
-		let addr = btree.normalize(btree.first_address());
+		let addr = btree.first_valid_address();
+		let end = btree.last_valid_address();
+		let len = btree.len();
 		IntoIter {
 			btree,
-			addr
+			addr,
+			end,
+			len
 		}
 	}
 }
 
+impl<K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for IntoIter<K, V, C> { }
+impl<K, V, C: ContainerMut<Node<K, V>>> std::iter::ExactSizeIterator for IntoIter<K, V, C> { }
+
 impl<K, V, C: ContainerMut<Node<K, V>>> Iterator for IntoIter<K, V, C> {
 	type Item = (K, V);
 
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		(self.len, Some(self.len))
+	}
+
 	fn next(&mut self) -> Option<(K, V)> {
-		match self.addr {
-			Some(addr) => {
-				eprintln!("addr: {}", addr);
-				let item = unsafe {
-					// this is safe because the item at `self.addr` exists and is never touched again.
-					std::ptr::read(self.btree.item(addr).unwrap())
-				};
+		if self.len > 0 {
+			self.len -= 1;
 
-				let (next_addr, release) = match self.btree.next_address(addr) {
-					Some(next_addr) => {
-						let release = next_addr.offset == self.btree.node(addr.id).item_count();
-						(self.btree.normalize(next_addr), release)
-					},
-					None => (None, true)
-				};
+			let item = unsafe {
+				// this is safe because the item at `self.addr` exists and is never touched again.
+				std::ptr::read(self.btree.item(self.addr).unwrap())
+			};
 
-				if release {
-					eprintln!("release {}", addr.id);
-					// we have gove through every item of the node, we can release it.
-					let node = self.btree.release_node(addr.id);
+			if self.len > 0 {
+				self.addr = self.btree.next_valid_address(self.addr).unwrap(); // an item address is always followed by a valid address.
+
+				loop {
+					if self.addr.offset < self.btree.node(self.addr.id).item_count() {
+						break // we have found an item address.
+					} else {
+						let id = self.addr.id;
+						self.addr = self.btree.next_valid_address(self.addr).unwrap();
+
+						// we have gove through every item of the node, we can release it.
+						let node = self.btree.release_node(id);
+						std::mem::forget(node); // do not call `drop` on the node since items have been moved.
+					}
+				}
+			} else {
+				// cleanup.
+				let mut id = Some(self.addr.id);
+				while let Some(node_id) = id {
+					let node = self.btree.release_node(node_id);
+					id = node.parent();
 					std::mem::forget(node); // do not call `drop` on the node since items have been moved.
 				}
+			}
 
-				self.addr = next_addr;
+			Some(item.into_pair())
+		} else {
+			None
+		}
+	}
+}
 
-				Some(item.into_pair())
-			},
-			None => None
+impl<K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for IntoIter<K, V, C> {
+	fn next_back(&mut self) -> Option<(K, V)> {
+		if self.len > 0 {
+			self.len -= 1;
+
+			self.end = self.btree.previous_valid_address(self.end).unwrap();
+
+			let item = unsafe {
+				// this is safe because the item at `self.end` exists and is never touched again.
+				std::ptr::read(self.btree.item(self.end).unwrap())
+			};
+
+			if self.len > 0 {
+				// self.end = self.btree.next_valid_address(self.addr).unwrap(); // an item address is always followed by a valid address.
+
+				// loop {
+				// 	if self.addr.offset < self.btree.node(self.addr.id).item_count() {
+				// 		break // we have found a valid address.
+				// 	} else {
+				// 		let id = self.addr.id;
+				// 		self.addr = self.btree.next_valid_address(self.addr).unwrap();
+
+				// 		// we have gove through every item of the node, we can release it.
+				// 		let node = self.btree.release_node(id);
+				// 		std::mem::forget(node); // do not call `drop` on the node since items have been moved.
+				// 	}
+				// }
+
+				// TODO
+			} else {
+				// cleanup.
+				let mut id = Some(self.addr.id);
+				while let Some(node_id) = id {
+					let node = self.btree.release_node(node_id);
+					id = node.parent();
+					std::mem::forget(node); // do not call `drop` on the node since items have been moved.
+				}
+			}
+
+			Some(item.into_pair())
+		} else {
+			None
 		}
 	}
 }

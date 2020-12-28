@@ -40,17 +40,29 @@ pub trait BTreeExt<K, V> {
 
 	fn item(&self, addr: ItemAddr) -> Option<&Item<K, V>>;
 
-	fn first_address(&self) -> ItemAddr;
+	fn first_item_address(&self) -> Option<ItemAddr>;
 
-	fn last_address(&self) -> ItemAddr;
+	fn first_valid_address(&self) -> ItemAddr;
+
+	fn last_item_address(&self) -> Option<ItemAddr>;
+
+	fn last_valid_address(&self) -> ItemAddr;
 
 	fn normalize(&self, addr: ItemAddr) -> Option<ItemAddr>;
 
 	fn leaf_address(&self, addr: ItemAddr) -> ItemAddr;
 
-	fn previous_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+	fn previous_item_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
 
-	fn next_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+	fn previous_valid_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+
+	/// Get the next item address.
+	fn next_item_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+
+	/// Get the next valid address.
+	fn next_valid_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+
+	fn next_item_or_last_valid_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
 
 	fn address_of<Q: ?Sized>(&self, key: &Q) -> Result<ItemAddr, ItemAddr> where K: Borrow<Q>, Q: Ord;
 
@@ -137,7 +149,21 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		self.node(addr.id).item(addr.offset)
 	}
 
-	fn first_address(&self) -> ItemAddr {
+	fn first_item_address(&self) -> Option<ItemAddr> {
+		match self.root {
+			Some(mut id) => loop {
+				match self.node(id).child_id_opt(0) {
+					Some(child_id) => {
+						id = child_id
+					},
+					None => return Some(ItemAddr::new(id, 0))
+				}
+			},
+			None => None
+		}
+	}
+
+	fn first_valid_address(&self) -> ItemAddr {
 		match self.root {
 			Some(mut id) => loop {
 				match self.node(id).child_id_opt(0) {
@@ -151,14 +177,28 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		}
 	}
 
-	fn last_address(&self) -> ItemAddr {
+	fn last_item_address(&self) -> Option<ItemAddr> {
 		match self.root {
 			Some(mut id) => loop {
 				let node = self.node(id);
 				let index = node.item_count();
 				match node.child_id_opt(index) {
 					Some(child_id) => id = child_id,
-					None => return ItemAddr::new(id, index - 1)
+					None => return Some(ItemAddr::new(id, index - 1))
+				}
+			},
+			None => None
+		}
+	}
+
+	fn last_valid_address(&self) -> ItemAddr {
+		match self.root {
+			Some(mut id) => loop {
+				let node = self.node(id);
+				let index = node.item_count();
+				match node.child_id_opt(index) {
+					Some(child_id) => id = child_id,
+					None => return ItemAddr::new(id, index)
 				}
 			},
 			None => ItemAddr::nowhere()
@@ -207,7 +247,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 
 	/// Get the address of the item located before this address.
 	#[inline]
-	fn previous_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+	fn previous_item_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
 		if addr.is_nowhere() {
 			return None
 		}
@@ -240,11 +280,128 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		}
 	}
 
-	/// Get the address of the item located after this address.
-	/// 
-	/// The returned address is not normalized.
 	#[inline]
-	fn next_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+	fn previous_valid_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+		if addr.is_nowhere() {
+			return None
+		}
+
+		let node = self.node(addr.id);
+		match node.child_id_opt(addr.offset) {
+			Some(child_id) => {
+				addr.offset = self.node(child_id).item_count();
+				addr.id = child_id;
+			},
+			None => {
+				loop {
+					if addr.offset > 0 {
+						addr.offset -= 1;
+						break
+					}
+
+					match self.node(addr.id).parent() {
+						Some(parent_id) => {
+							addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+							addr.id = parent_id;
+						},
+						None => return None
+					}
+				}
+			}
+		}
+
+		Some(addr)
+	}
+
+	/// Get the address of the item located after this address if any.
+	#[inline]
+	fn next_item_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+		if addr.is_nowhere() {
+			return None
+		}
+
+		let item_count = self.node(addr.id).item_count();
+		if addr.offset < item_count {
+			addr.offset += 1;
+		} else if addr.offset > item_count {
+			return None
+		}
+
+		// let original_addr_shifted = addr;
+
+		loop {
+			let node = self.node(addr.id);
+
+			match node.child_id_opt(addr.offset) {
+				Some(child_id) => {
+					addr.offset = 0;
+					addr.id = child_id;
+				},
+				None => {
+					loop {
+						let node = self.node(addr.id);
+
+						if addr.offset < node.item_count() {
+							return Some(addr)
+						}
+
+						match node.parent() {
+							Some(parent_id) => {
+								addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+								addr.id = parent_id;
+							},
+							None => {
+								// return Some(original_addr_shifted)
+								return None
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	#[inline]
+	fn next_valid_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+		if addr.is_nowhere() {
+			return None
+		}
+
+		let item_count = self.node(addr.id).item_count();
+		if addr.offset <= item_count {
+			addr.offset += 1;
+		} else if addr.offset > item_count {
+			return None
+		}
+
+		loop {
+			let node = self.node(addr.id);
+			match node.child_id_opt(addr.offset) {
+				Some(child_id) => {
+					addr.offset = 0;
+					addr.id = child_id;
+				},
+				None => {
+					if addr.offset > node.item_count() {
+						match node.parent() {
+							Some(parent_id) => {
+								addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+								addr.id = parent_id;
+							},
+							None => return None
+						}
+					}
+
+					break
+				}
+			}
+		}
+
+		Some(addr)
+	}
+
+	#[inline]
+	fn next_item_or_last_valid_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
 		if addr.is_nowhere() {
 			return None
 		}
@@ -441,7 +598,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 				Some((item, addr))
 			},
 			Some(Err(left_child_id)) => { // removed from an internal node.
-				let new_addr = self.next_address(addr).unwrap();
+				let new_addr = self.next_item_or_last_valid_address(addr).unwrap();
 				let (separator, leaf_id) = self.remove_rightmost_leaf_of(left_child_id);
 				let item = self.node_mut(addr.id).replace(addr.offset, separator);
 				let addr = self.rebalance(leaf_id, new_addr);
