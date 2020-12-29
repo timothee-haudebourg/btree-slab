@@ -13,7 +13,8 @@ use crate::{
 			Node,
 			Balance,
 			Item,
-			ItemAddr
+			ItemAddr,
+			Offset
 		}
 	},
 	Container,
@@ -33,16 +34,22 @@ pub trait BTreeExt<K, V> {
 
 	/// Get the node associated to the given `id`.
 	///
-	/// Panics if `id` is out of bounds.
+	/// Panics if `id` is out of bounds.usize::MAX
 	fn node(&self, id: usize) -> &Node<K, V>;
 
 	fn get_in<Q: ?Sized>(&self, key: &Q, id: usize) -> Option<&V> where K: Borrow<Q>, Q: Ord;
 
 	fn item(&self, addr: ItemAddr) -> Option<&Item<K, V>>;
 
+	/// Get the first item address, if any.
+	/// 
+	/// Returns the first occupied valid address, or `None` if the tree is empty.
 	fn first_item_address(&self) -> Option<ItemAddr>;
 
-	fn first_valid_address(&self) -> ItemAddr;
+	/// Get the first back address.
+	/// 
+	/// The returned address may not be occupied if the tree is empty.
+	fn first_back_address(&self) -> ItemAddr;
 
 	fn last_item_address(&self) -> Option<ItemAddr>;
 
@@ -52,17 +59,110 @@ pub trait BTreeExt<K, V> {
 
 	fn leaf_address(&self, addr: ItemAddr) -> ItemAddr;
 
+	/// Get the previous item address.
+	/// 
+	/// Returns the previous valid occupied address.
+	/// 
+	/// The following diagram shows the order between addresses defined by this function.
+	/// ```text
+	///                                          ┌───────────┐ 
+	///                            ╔═════════════╪══╗  ╔══╗  │ 
+	///                            ║             │┌─v─┐║┌─v─┐│  
+	///                ┌───────────╫─────────────││ 0 │║│ 1 ││──────────────────────┐
+	///                │           ║             │└─v─┘║└─v─┘│                      │
+	///                │           ║             └──╫──╫──╫──┘                      │
+	///    start v     │           ║                ║  ║│ ╚══════════════════════╗  │  ^ end
+	///          ║     │           ║             ╔══╝  ╚╪══════════╗             ║  │  ║ 
+	///       ┌──╫──────────────┐  ║          ┌──╫──────────────┐  ║          ┌──╫─────╫──┐ 
+	///       │  ║     ╔═════╗  │  ║          │  ║     ╔═════╗  │  ║          │  ║     ║  │
+	///       │┌─v─┐ ┌─^─┐ ┌─v─┐│  ║          │┌─v─┐ ┌─^─┐ ┌─v─┐│  ║          │┌─v─┐ ┌─^─┐│
+	///       ││ 0 │ │ 1 │ │ 2 ││  ║          ││ 0 │ │ 1 │ │ 2 ││  ║          ││ 0 │ │ 1 ││
+	///       │└─v─┘ └─^─┘ └─v─┘│  ║          │└─v─┘ └─^─┘ └─v─┘│  ║          │└─v─┘ └─^─┘│
+	///       │  ╚═════╝     ╚══╪══╝          │  ╚═════╝     ╚══╪══╝          │  ╚═════╝  │
+	///       └─────────────────┘             └─────────────────┘             └───────────┘
+	/// ```
 	fn previous_item_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
 
-	fn previous_valid_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+	/// Get the previous front address.
+	/// 
+	/// A "front address" is a valid address whose offset is less that the number of items in the node.
+	/// If `addr.offset` is equal to `-1`, then it doesn't actually refer to an existing item in the node.
+	/// 
+	/// The following diagram shows the order between addresses defined by this function.
+	/// ```text
+	///                                                         ^ end
+	///                                               ┌─────────║──┐
+	///                            ╔═══════════════╗  │╔══╗     ║  │
+	///                            ║             ┌─v─┐│║┌─v─┐ ┌─^─┐│
+	///                      ┌─────╫─────────────│-1 ││║│ 0 │ │ 1 ││ ─────────────────────┐
+	///                      │     ║             └─v─┘│║└─v─┘ └─^─┘│                      │
+	///                      │     ║               ║  └╫──╫─────╫──┘                      │
+	///                      │     ║               ║   ║  ║  │  ╚═════════════════════════╪═══════╗
+	///    start v           │     ║               ║   ║  ╚══╪═══════════════════╗        │       ║
+	///          ║           │     ║             ╔═╝   ╚═════╪═════╗             ║        │       ║
+	///          ║  ┌──────────────╫──┐          ║  ┌──────────────╫──┐          ║  ┌───────────┐ ║
+	///          ║  │  ╔═════╗     ║  │          ║  │  ╔═════╗     ║  │          ║  │  ╔═════╗  │ ║
+	///        ┌─v─┐│┌─^─┐ ┌─v─┐ ┌─^─┐│        ┌─v─┐│┌─^─┐ ┌─v─┐ ┌─^─┐│        ┌─v─┐│┌─^─┐ ┌─v─┐│ ║
+	///        │-1 │││ 0 │ │ 1 │ │ 2 ││        │-1 │││ 0 │ │ 1 │ │ 2 ││        │-1 │││ 0 │ │ 1 ││ ║
+	///        └─v─┘│└─^─┘ └─v─┘ └─^─┘│        └─v─┘│└─^─┘ └─v─┘ └─^─┘│        └─v─┘│└─^─┘ └─v─┘│ ║
+	///          ╚══╪══╝     ╚═════╝  │          ╚══╪══╝     ╚═════╝  │          ╚══╪══╝     ╚══╪═╝
+	///             └─────────────────┘             └─────────────────┘             └───────────┘
+	/// ```
+	fn previous_front_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
 
 	/// Get the next item address.
+	/// 
+	/// Returns the next valid occupied address.
+	/// 
+	/// The following diagram shows the order between addresses defined by this function.
+	/// ```text
+	///                                          ┌───────────┐ 
+	///                            ╔═════════════╪══╗  ╔══╗  │ 
+	///                            ║             │┌─v─┐║┌─v─┐│  
+	///                ┌───────────╫─────────────││ 0 │║│ 1 ││──────────────────────┐
+	///                │           ║             │└─v─┘║└─v─┘│                      │
+	///                │           ║             └──╫──╫──╫──┘                      │
+	///    start v     │           ║                ║  ║│ ╚══════════════════════╗  │  ^ end
+	///          ║     │           ║             ╔══╝  ╚╪══════════╗             ║  │  ║ 
+	///       ┌──╫──────────────┐  ║          ┌──╫──────────────┐  ║          ┌──╫─────╫──┐ 
+	///       │  ║     ╔═════╗  │  ║          │  ║     ╔═════╗  │  ║          │  ║     ║  │
+	///       │┌─v─┐ ┌─^─┐ ┌─v─┐│  ║          │┌─v─┐ ┌─^─┐ ┌─v─┐│  ║          │┌─v─┐ ┌─^─┐│
+	///       ││ 0 │ │ 1 │ │ 2 ││  ║          ││ 0 │ │ 1 │ │ 2 ││  ║          ││ 0 │ │ 1 ││
+	///       │└─v─┘ └─^─┘ └─v─┘│  ║          │└─v─┘ └─^─┘ └─v─┘│  ║          │└─v─┘ └─^─┘│
+	///       │  ╚═════╝     ╚══╪══╝          │  ╚═════╝     ╚══╪══╝          │  ╚═════╝  │
+	///       └─────────────────┘             └─────────────────┘             └───────────┘
+	/// ```
 	fn next_item_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
 
-	/// Get the next valid address.
-	fn next_valid_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+	/// Get the next back address.
+	/// 
+	/// A "back address" is a valid address whose offset is at least `0`.
+	/// If `addr.offset` is equal to the number of items in the node then it doesn't actually refer
+	/// to an existing item in the node,
+	/// but it can be used to insert a new item with `BTreeExt::insert_at`.
+	/// 
+	/// The following diagram shows the order between addresses defined by this function.
+	/// ```text
+	///                                          ┌───────────┐  ^ end
+	///                            ╔═════════════╪══╗  ╔══╗  │  ║
+	///                            ║             │┌─v─┐║┌─v─┐│┌─^─┐
+	///                ┌───────────╫─────────────││ 0 │║│ 1 │││ 2 │─────────────────┐
+	///                │           ║             │└─v─┘║└─v─┘│└─^─┘                 │
+	///                │           ║             └──╫──╫──╫──┘  ╚═══════════════════╪════════════╗
+	///    start v     │           ║                ║  ║│ ╚══════════════════════╗  │            ║
+	///          ║     │           ║             ╔══╝  ╚╪══════════╗             ║  │            ║
+	///       ┌──╫──────────────┐  ║          ┌──╫──────────────┐  ║          ┌──╫────────┐      ║
+	///       │  ║     ╔═════╗  │  ║          │  ║     ╔═════╗  │  ║          │  ║     ╔══╪══╗   ║
+	///       │┌─v─┐ ┌─^─┐ ┌─v─┐│┌─^─┐        │┌─v─┐ ┌─^─┐ ┌─v─┐│┌─^─┐        │┌─v─┐ ┌─^─┐│┌─v─┐ ║
+	///       ││ 0 │ │ 1 │ │ 2 │││ 3 │        ││ 0 │ │ 1 │ │ 2 │││ 3 │        ││ 0 │ │ 1 │││ 2 >═╝
+	///       │└─v─┘ └─^─┘ └─v─┘│└─^─┘        │└─v─┘ └─^─┘ └─v─┘│└─^─┘        │└─v─┘ └─^─┘│└───┘
+	///       │  ╚═════╝     ╚══╪══╝          │  ╚═════╝     ╚══╪══╝          │  ╚═════╝  │
+	///       └─────────────────┘             └─────────────────┘             └───────────┘
+	/// ```
+	fn next_back_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
 
-	fn next_item_or_last_valid_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+	/// Get the next item address if any, or the next back address otherwise.
+	fn next_item_or_back_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
 
 	fn address_of<Q: ?Sized>(&self, key: &Q) -> Result<ItemAddr, ItemAddr> where K: Borrow<Q>, Q: Ord;
 
@@ -163,7 +263,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		}
 	}
 
-	fn first_valid_address(&self) -> ItemAddr {
+	fn first_back_address(&self) -> ItemAddr {
 		match self.root {
 			Some(mut id) => loop {
 				match self.node(id).child_id_opt(0) {
@@ -281,28 +381,39 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	}
 
 	#[inline]
-	fn previous_valid_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+	fn previous_front_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
 		if addr.is_nowhere() {
 			return None
 		}
 
-		let node = self.node(addr.id);
-		match node.child_id_opt(addr.offset.unwrap()) { // TODO unwrap may fail here.
-			Some(child_id) => {
-				addr.offset = self.node(child_id).item_count().into();
-				addr.id = child_id;
-			},
-			None => {
-				loop {
-					if addr.offset > 0 {
-						addr.offset.decr();
-						break
-					}
+		loop {
+			let node = self.node(addr.id);
+			match addr.offset.value() {
+				Some(offset) => {
+					let index = if offset < node.item_count() {
+						offset
+					} else {
+						node.item_count()
+					};
 
-					match self.node(addr.id).parent() {
+					match node.child_id_opt(index) {
+						Some(child_id) => {
+							addr.offset = (self.node(child_id).item_count()).into();
+							addr.id = child_id;
+						},
+						None => {
+							addr.offset.decr();
+							break
+						}
+					}
+				},
+				None => {
+					match node.parent() {
 						Some(parent_id) => {
 							addr.offset = self.node(parent_id).child_index(addr.id).unwrap().into();
+							addr.offset.decr();
 							addr.id = parent_id;
+							break
 						},
 						None => return None
 					}
@@ -362,37 +473,39 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	}
 
 	#[inline]
-	fn next_valid_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+	fn next_back_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
 		if addr.is_nowhere() {
-			return None
-		}
-
-		let item_count = self.node(addr.id).item_count();
-		if addr.offset <= item_count {
-			addr.offset.incr();
-		} else if addr.offset > item_count {
 			return None
 		}
 
 		loop {
 			let node = self.node(addr.id);
-			match node.child_id_opt(addr.offset.unwrap()) { // TODO unwrap may fail here.
-				Some(child_id) => {
-					addr.offset = 0.into();
-					addr.id = child_id;
-				},
-				None => {
-					if addr.offset > node.item_count() {
-						match node.parent() {
-							Some(parent_id) => {
-								addr.offset = self.node(parent_id).child_index(addr.id).unwrap().into();
-								addr.id = parent_id;
-							},
-							None => return None
-						}
-					}
+			let index = match addr.offset.value() {
+				Some(offset) => offset + 1,
+				None => 0
+			};
 
-					break
+			if index <= node.item_count() {
+				match node.child_id_opt(index) {
+					Some(child_id) => {
+						addr.offset = Offset::before();
+						addr.id = child_id;
+					},
+					None => {
+						addr.offset = index.into();
+						break
+					}
+				}
+			} else {
+				match node.parent() {
+					Some(parent_id) => {
+						addr.offset = self.node(parent_id).child_index(addr.id).unwrap().into();
+						addr.id = parent_id;
+						break
+					},
+					None => {
+						return None
+					}
 				}
 			}
 		}
@@ -401,7 +514,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	}
 
 	#[inline]
-	fn next_item_or_last_valid_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+	fn next_item_or_back_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
 		if addr.is_nowhere() {
 			return None
 		}
@@ -598,7 +711,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 				Some((item, addr))
 			},
 			Some(Err(left_child_id)) => { // removed from an internal node.
-				let new_addr = self.next_item_or_last_valid_address(addr).unwrap();
+				let new_addr = self.next_item_or_back_address(addr).unwrap();
 				let (separator, leaf_id) = self.remove_rightmost_leaf_of(left_child_id);
 				let item = self.node_mut(addr.id).replace(addr.offset, separator);
 				let addr = self.rebalance(leaf_id, new_addr);

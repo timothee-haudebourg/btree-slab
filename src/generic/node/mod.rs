@@ -24,6 +24,14 @@ pub(crate) trait Keyed {
 pub struct Offset(usize);
 
 impl Offset {
+	pub fn before() -> Offset {
+		Offset(usize::MAX)
+	}
+
+	pub fn is_before(&self) -> bool {
+		self.0 == usize::MAX
+	}
+
 	pub fn value(&self) -> Option<usize> {
 		if self.0 == usize::MAX {
 			None
