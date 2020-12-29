@@ -1,7 +1,10 @@
 use std::fmt;
+use super::Offset;
 
 /// Item location in a BTreeMap.
 ///
+/// Each item in a B-Tree is addressed by a node identifier and an offset in the node.
+/// 
 /// ## Validity
 /// An item adress `addr` is *valid* in a given BTreeMap if it `addr.id` refers to an existing
 /// node and if `addr.offset` is **less or equal** to the number of items in the node.
@@ -18,12 +21,14 @@ use std::fmt;
 pub struct ItemAddr {
 	/// Identifier of the node.
 	pub id: usize,
-	pub offset: usize
+
+	/// Offset in the node.
+	pub offset: Offset
 }
 
 impl ItemAddr {
 	#[inline]
-	pub fn new(id: usize, offset: usize) -> ItemAddr {
+	pub fn new(id: usize, offset: Offset) -> ItemAddr {
 		ItemAddr {
 			id, offset
 		}
@@ -33,7 +38,7 @@ impl ItemAddr {
 	pub fn nowhere() -> ItemAddr {
 		ItemAddr {
 			id: std::usize::MAX,
-			offset: 0
+			offset: 0.into()
 		}
 	}
 

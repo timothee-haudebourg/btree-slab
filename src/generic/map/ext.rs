@@ -156,7 +156,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 					Some(child_id) => {
 						id = child_id
 					},
-					None => return Some(ItemAddr::new(id, 0))
+					None => return Some(ItemAddr::new(id, 0.into()))
 				}
 			},
 			None => None
@@ -170,7 +170,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 					Some(child_id) => {
 						id = child_id
 					},
-					None => return ItemAddr::new(id, 0)
+					None => return ItemAddr::new(id, 0.into()) // TODO FIXME thechnically not the first
 				}
 			},
 			None => ItemAddr::nowhere()
@@ -184,7 +184,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 				let index = node.item_count();
 				match node.child_id_opt(index) {
 					Some(child_id) => id = child_id,
-					None => return Some(ItemAddr::new(id, index - 1))
+					None => return Some(ItemAddr::new(id, (index - 1).into()))
 				}
 			},
 			None => None
@@ -198,7 +198,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 				let index = node.item_count();
 				match node.child_id_opt(index) {
 					Some(child_id) => id = child_id,
-					None => return ItemAddr::new(id, index)
+					None => return ItemAddr::new(id, index.into())
 				}
 			},
 			None => ItemAddr::nowhere()
@@ -215,7 +215,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 				if addr.offset >= node.item_count() {
 					match node.parent() {
 						Some(parent_id) => {
-							addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+							addr.offset = self.node(parent_id).child_index(addr.id).unwrap().into();
 							addr.id = parent_id;
 						},
 						None => return None
@@ -232,10 +232,10 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		if !addr.is_nowhere() {
 			loop {
 				let node = self.node(addr.id);
-				match node.child_id_opt(addr.offset) {
+				match node.child_id_opt(addr.offset.unwrap()) { // TODO unwrap may fail here!
 					Some(child_id) => {
 						addr.id = child_id;
-						addr.offset = self.node(child_id).item_count()
+						addr.offset = self.node(child_id).item_count().into()
 					},
 					None => break
 				}
@@ -255,21 +255,21 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		loop {
 			let node = self.node(addr.id);
 
-			match node.child_id_opt(addr.offset) {
+			match node.child_id_opt(addr.offset.unwrap()) { // TODO unwrap may fail here.
 				Some(child_id) => {
-					addr.offset = self.node(child_id).item_count();
+					addr.offset = self.node(child_id).item_count().into();
 					addr.id = child_id;
 				},
 				None => {
 					loop {
 						if addr.offset > 0 {
-							addr.offset -= 1;
+							addr.offset.decr();
 							return Some(addr)
 						}
 
 						match self.node(addr.id).parent() {
 							Some(parent_id) => {
-								addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+								addr.offset = self.node(parent_id).child_index(addr.id).unwrap().into();
 								addr.id = parent_id;
 							},
 							None => return None
@@ -287,21 +287,21 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		}
 
 		let node = self.node(addr.id);
-		match node.child_id_opt(addr.offset) {
+		match node.child_id_opt(addr.offset.unwrap()) { // TODO unwrap may fail here.
 			Some(child_id) => {
-				addr.offset = self.node(child_id).item_count();
+				addr.offset = self.node(child_id).item_count().into();
 				addr.id = child_id;
 			},
 			None => {
 				loop {
 					if addr.offset > 0 {
-						addr.offset -= 1;
+						addr.offset.decr();
 						break
 					}
 
 					match self.node(addr.id).parent() {
 						Some(parent_id) => {
-							addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+							addr.offset = self.node(parent_id).child_index(addr.id).unwrap().into();
 							addr.id = parent_id;
 						},
 						None => return None
@@ -322,7 +322,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 
 		let item_count = self.node(addr.id).item_count();
 		if addr.offset < item_count {
-			addr.offset += 1;
+			addr.offset.incr();
 		} else if addr.offset > item_count {
 			return None
 		}
@@ -332,9 +332,9 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		loop {
 			let node = self.node(addr.id);
 
-			match node.child_id_opt(addr.offset) {
+			match node.child_id_opt(addr.offset.unwrap()) { // unwrap may fail here.
 				Some(child_id) => {
-					addr.offset = 0;
+					addr.offset = 0.into();
 					addr.id = child_id;
 				},
 				None => {
@@ -347,7 +347,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 
 						match node.parent() {
 							Some(parent_id) => {
-								addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+								addr.offset = self.node(parent_id).child_index(addr.id).unwrap().into();
 								addr.id = parent_id;
 							},
 							None => {
@@ -369,23 +369,23 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 
 		let item_count = self.node(addr.id).item_count();
 		if addr.offset <= item_count {
-			addr.offset += 1;
+			addr.offset.incr();
 		} else if addr.offset > item_count {
 			return None
 		}
 
 		loop {
 			let node = self.node(addr.id);
-			match node.child_id_opt(addr.offset) {
+			match node.child_id_opt(addr.offset.unwrap()) { // TODO unwrap may fail here.
 				Some(child_id) => {
-					addr.offset = 0;
+					addr.offset = 0.into();
 					addr.id = child_id;
 				},
 				None => {
 					if addr.offset > node.item_count() {
 						match node.parent() {
 							Some(parent_id) => {
-								addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+								addr.offset = self.node(parent_id).child_index(addr.id).unwrap().into();
 								addr.id = parent_id;
 							},
 							None => return None
@@ -408,7 +408,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 
 		let item_count = self.node(addr.id).item_count();
 		if addr.offset < item_count {
-			addr.offset += 1;
+			addr.offset.incr();
 		} else if addr.offset > item_count {
 			return None
 		}
@@ -418,9 +418,9 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		loop {
 			let node = self.node(addr.id);
 
-			match node.child_id_opt(addr.offset) {
+			match node.child_id_opt(addr.offset.unwrap()) { // TODO unwrap may fail here.
 				Some(child_id) => {
-					addr.offset = 0;
+					addr.offset = 0.into();
 					addr.id = child_id;
 				},
 				None => {
@@ -433,7 +433,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 
 						match node.parent() {
 							Some(parent_id) => {
-								addr.offset = self.node(parent_id).child_index(addr.id).unwrap();
+								addr.offset = self.node(parent_id).child_index(addr.id).unwrap().into();
 								addr.id = parent_id;
 							},
 							None => {
@@ -460,7 +460,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 					return Ok(ItemAddr { id, offset })
 				},
 				Err((offset, None)) => {
-					return Err(ItemAddr { id, offset })
+					return Err(ItemAddr::new(id, offset.into()))
 				},
 				Err((_, Some(child_id))) => {
 					id = child_id;
@@ -564,7 +564,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 				let id = self.allocate_node(new_root);
 				self.root = Some(id);
 				self.len += 1;
-				ItemAddr { id, offset: 0 }
+				ItemAddr { id, offset: 0.into() }
 			} else {
 				panic!("invalid item address")
 			}
@@ -634,7 +634,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 				Err((offset, None)) => {
 					let (opt_new_value, result) = action(None);
 					if let Some(new_value) = opt_new_value {
-						self.insert_exactly_at(ItemAddr::new(id, offset), Item::new(key, new_value), None);
+						self.insert_exactly_at(ItemAddr::new(id, offset.into()), Item::new(key, new_value), None);
 					}
 
 					return result
@@ -687,7 +687,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 					match self.node(id).parent() {
 						Some(parent_id) => {
 							let parent = self.node_mut(parent_id);
-							let offset = parent.child_index(id).unwrap();
+							let offset = parent.child_index(id).unwrap().into();
 							parent.insert(offset, median, Some(right_id));
 
 							// new address.
@@ -697,12 +697,12 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 								} else if addr.offset > median_offset {
 									addr = ItemAddr {
 										id: right_id,
-										offset: addr.offset - median_offset - 1
+										offset: (addr.offset.unwrap() - median_offset - 1).into()
 									}
 								}
 							} else if addr.id == parent_id {
 								if addr.offset >= offset {
-									addr.offset += 1
+									addr.offset.incr()
 								}
 							}
 
@@ -721,11 +721,11 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 							// new address.
 							if addr.id == id {
 								if addr.offset == median_offset {
-									addr = ItemAddr { id: root_id, offset: 0 }
+									addr = ItemAddr { id: root_id, offset: 0.into() }
 								} else if addr.offset > median_offset {
 									addr = ItemAddr {
 										id: right_id,
-										offset: addr.offset - median_offset - 1
+										offset: (addr.offset.unwrap() - median_offset - 1).into()
 									}
 								}
 							}
@@ -766,7 +766,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 
 										if addr.id == id {
 											addr.id = root_id;
-											addr.offset = root.item_count()
+											addr.offset = root.item_count().into()
 										}
 									},
 									None => {

@@ -1,4 +1,8 @@
-use std::borrow::Borrow;
+use std::{
+	borrow::Borrow,
+	cmp::Ordering,
+	fmt
+};
 
 mod item;
 mod addr;
@@ -14,6 +18,117 @@ pub(crate) trait Keyed {
 	type Key;
 
 	fn key(&self) -> &Self::Key;
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Offset(usize);
+
+impl Offset {
+	pub fn value(&self) -> Option<usize> {
+		if self.0 == usize::MAX {
+			None
+		} else {
+			Some(self.0)
+		}
+	}
+
+	pub fn unwrap(self) -> usize {
+		if self.0 == usize::MAX {
+			panic!("Offset out of bounds")
+		} else {
+			self.0
+		}
+	}
+
+	pub fn incr(&mut self) {
+		if self.0 == usize::MAX {
+			self.0 = 0
+		} else {
+			self.0 += 1
+		}
+	}
+
+	pub fn decr(&mut self) {
+		if self.0 == 0 {
+			self.0 = usize::MAX
+		} else {
+			self.0 -= 1
+		}
+	}
+}
+
+impl PartialOrd for Offset {
+	fn partial_cmp(&self, offset: &Offset) -> Option<Ordering> {
+		if self.0 == usize::MAX || offset.0 == usize::MAX {
+			if self.0 == usize::MAX && offset.0 == usize::MAX {
+				Some(Ordering::Equal)
+			} else if self.0 == usize::MAX {
+				Some(Ordering::Less)
+			} else {
+				Some(Ordering::Greater)
+			}
+		} else {
+			self.0.partial_cmp(&offset.0)
+		}
+	}
+}
+
+impl Ord for Offset {
+	fn cmp(&self, offset: &Offset) -> Ordering {
+		if self.0 == usize::MAX || offset.0 == usize::MAX {
+			if self.0 == usize::MAX && offset.0 == usize::MAX {
+				Ordering::Equal
+			} else if self.0 == usize::MAX {
+				Ordering::Less
+			} else {
+				Ordering::Greater
+			}
+		} else {
+			self.0.cmp(&offset.0)
+		}
+	}
+}
+
+impl PartialEq<usize> for Offset {
+	fn eq(&self, offset: &usize) -> bool {
+		self.0 != usize::MAX && self.0 == *offset
+	}
+}
+
+impl PartialOrd<usize> for Offset {
+	fn partial_cmp(&self, offset: &usize) -> Option<Ordering> {
+		if self.0 == usize::MAX {
+			Some(Ordering::Less)
+		} else {
+			self.0.partial_cmp(offset)
+		}
+	}
+}
+
+impl From<usize> for Offset {
+	fn from(offset: usize) -> Offset {
+		Offset(offset)
+	}
+}
+
+impl fmt::Display for Offset {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		if self.0 == usize::MAX {
+			write!(f, "-1")
+		} else {
+			self.0.fmt(f)
+		}
+	}
+}
+
+impl fmt::Debug for Offset {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		if self.0 == usize::MAX {
+			write!(f, "-1")
+		} else {
+			self.0.fmt(f)
+		}
+	}
 }
 
 #[derive(Debug)]
@@ -153,21 +268,21 @@ impl<K, V> Node<K, V> {
 	/// this funtion returns the index and id of the child that may match the key,
 	/// or `Err(None)` if it is a leaf.
 	#[inline]
-	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<usize, (usize, Option<usize>)> where K: Borrow<Q>, Q: Ord {
+	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<Offset, (usize, Option<usize>)> where K: Borrow<Q>, Q: Ord {
 		match self {
 			Node::Internal(node) => match node.offset_of(key) {
 				Ok(i) => Ok(i),
-				Err((offset, child_id)) => Err((offset, Some(child_id)))
+				Err((index, child_id)) => Err((index, Some(child_id)))
 			},
 			Node::Leaf(leaf) => match leaf.offset_of(key) {
 				Ok(i) => Ok(i),
-				Err(offset) =>  Err((offset, None))
+				Err(index) =>  Err((index.unwrap(), None))
 			}
 		}
 	}
 
 	#[inline]
-	pub fn item(&self, offset: usize) -> Option<&Item<K, V>> {
+	pub fn item(&self, offset: Offset) -> Option<&Item<K, V>> {
 		match self {
 			Node::Internal(node) => node.item(offset),
 			Node::Leaf(leaf) => leaf.item(offset)
@@ -175,7 +290,7 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn item_mut(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
+	pub fn item_mut(&mut self, offset: Offset) -> Option<&mut Item<K, V>> {
 		match self {
 			Node::Internal(node) => node.item_mut(offset),
 			Node::Leaf(leaf) => leaf.item_mut(offset)
@@ -187,7 +302,7 @@ impl<K, V> Node<K, V> {
 	/// It is assumed that the node is not free.
 	/// If it is a leaf node, there must be a free space in it for the inserted value.
 	#[inline]
-	pub fn insert_by_key(&mut self, key: K, value: V) -> Result<(usize, Option<V>), (K, V, usize, usize)> where K: Ord {
+	pub fn insert_by_key(&mut self, key: K, value: V) -> Result<(Offset, Option<V>), (K, V, usize, usize)> where K: Ord {
 		match self {
 			Node::Internal(node) => match node.insert_by_key(key, value) {
 				Ok((offset, value)) => Ok((offset, Some(value))),
@@ -223,7 +338,7 @@ impl<K, V> Node<K, V> {
 
 	/// Return the offset of the separator.
 	#[inline]
-	pub fn append(&mut self, separator: Item<K, V>, other: Node<K, V>) -> usize {
+	pub fn append(&mut self, separator: Item<K, V>, other: Node<K, V>) -> Offset {
 		match (self, other) {
 			(Node::Internal(node), Node::Internal(other)) => node.append(separator, other),
 			(Node::Leaf(leaf), Node::Leaf(other)) => leaf.append(separator, other),
@@ -251,7 +366,7 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn push_right(&mut self, item: Item<K, V>, opt_child_id: Option<usize>) -> usize {
+	pub fn push_right(&mut self, item: Item<K, V>, opt_child_id: Option<usize>) -> Offset {
 		match self {
 			Node::Internal(node) => node.push_right(item, opt_child_id.unwrap()),
 			Node::Leaf(leaf) => leaf.push_right(item)
@@ -259,7 +374,7 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn pop_right(&mut self) -> Result<(usize, Item<K, V>, Option<usize>), WouldUnderflow> {
+	pub fn pop_right(&mut self) -> Result<(Offset, Item<K, V>, Option<usize>), WouldUnderflow> {
 		match self {
 			Node::Internal(node) => {
 				let (offset, item, child_id) = node.pop_right()?;
@@ -273,11 +388,11 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn leaf_remove(&mut self, offset: usize) -> Option<Result<Item<K, V>, usize>> {
+	pub fn leaf_remove(&mut self, offset: Offset) -> Option<Result<Item<K, V>, usize>> {
 		match self {
 			Node::Internal(node) => {
 				if offset < node.item_count() {
-					let left_child_index = offset;
+					let left_child_index = offset.unwrap();
 					Some(Err(node.child_id(left_child_index)))
 				} else {
 					None
@@ -295,7 +410,7 @@ impl<K, V> Node<K, V> {
 
 	/// Remove the item at the given offset.
 	#[inline]
-	pub fn remove(&mut self, offset: usize) -> Result<Item<K, V>, (usize, Item<K, V>, usize)> {
+	pub fn remove(&mut self, offset: Offset) -> Result<Item<K, V>, (usize, Item<K, V>, usize)> {
 		match self {
 			Node::Internal(node) => Err(node.remove(offset)),
 			Node::Leaf(leaf) => Ok(leaf.remove(offset))
@@ -318,7 +433,7 @@ impl<K, V> Node<K, V> {
 	///
 	/// It is assumed that the node will not overflow.
 	#[inline]
-	pub fn insert(&mut self, offset: usize, item: Item<K, V>, opt_right_child_id: Option<usize>) {
+	pub fn insert(&mut self, offset: Offset, item: Item<K, V>, opt_right_child_id: Option<usize>) {
 		match self {
 			Node::Internal(node) => node.insert(offset, item, opt_right_child_id.unwrap()),
 			Node::Leaf(leaf) => leaf.insert(offset, item)
@@ -326,7 +441,7 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn replace(&mut self, offset: usize, item: Item<K, V>) -> Item<K, V> {
+	pub fn replace(&mut self, offset: Offset, item: Item<K, V>) -> Item<K, V> {
 		match self {
 			Node::Internal(node) => node.replace(offset, item),
 			_ => panic!("can only replace in internal nodes")

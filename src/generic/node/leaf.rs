@@ -7,6 +7,7 @@ use crate::{
 		},
 		node::{
 			Item,
+			Offset,
 			Balance,
 			WouldUnderflow
 		}
@@ -92,44 +93,50 @@ impl<K, V> Leaf<K, V> {
 
 	/// Find the offset of the item matching the given key.
 	#[inline]
-	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<usize, usize> where K: Borrow<Q>, Q: Ord {
+	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<Offset, Offset> where K: Borrow<Q>, Q: Ord {
 		match binary_search_min(&self.items, key) {
 			Some(i) => {
 				if self.items[i].key().borrow() == key {
-					Ok(i)
+					Ok(i.into())
 				} else {
-					Err(i+1)
+					Err((i+1).into())
 				}
 			},
-			None => Err(0)
+			None => Err(0.into())
 		}
 	}
 
 	#[inline]
-	pub fn item(&self, offset: usize) -> Option<&Item<K, V>> {
-		self.items.get(offset)
+	pub fn item(&self, offset: Offset) -> Option<&Item<K, V>> {
+		match offset.value() {
+			Some(offset) => self.items.get(offset),
+			None => None
+		}
 	}
 
 	#[inline]
-	pub fn item_mut(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
-		self.items.get_mut(offset)
+	pub fn item_mut(&mut self, offset: Offset) -> Option<&mut Item<K, V>> {
+		match offset.value() {
+			Some(offset) => self.items.get_mut(offset),
+			None => None
+		}
 	}
 
 	#[inline]
-	pub fn insert_by_key(&mut self, key: K, mut value: V) -> (usize, Option<V>) where K: Ord {
+	pub fn insert_by_key(&mut self, key: K, mut value: V) -> (Offset, Option<V>) where K: Ord {
 		match binary_search_min(&self.items, &key) {
 			Some(i) => {
 				if self.items[i].key() == &key {
 					std::mem::swap(&mut value, self.items[i].value_mut());
-					(i, Some(value))
+					(i.into(), Some(value))
 				} else {
 					self.items.insert(i+1, Item::new(key, value));
-					(i+1, None)
+					((i+1).into(), None)
 				}
 			},
 			None => {
 				self.items.insert(0, Item::new(key, value));
-				(0, None)
+				(0.into(), None)
 			}
 		}
 	}
@@ -155,11 +162,11 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[inline]
-	pub fn append(&mut self, separator: Item<K, V>, mut other: Leaf<K, V>) -> usize {
+	pub fn append(&mut self, separator: Item<K, V>, mut other: Leaf<K, V>) -> Offset {
 		let offset = self.items.len();
 		self.items.push(separator);
 		self.items.append(&mut other.items);
-		offset
+		offset.into()
 	}
 
 	#[inline]
@@ -177,20 +184,20 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[inline]
-	pub fn push_right(&mut self, item: Item<K, V>) -> usize {
+	pub fn push_right(&mut self, item: Item<K, V>) -> Offset {
 		let offset = self.items.len();
 		self.items.push(item);
-		offset
+		offset.into()
 	}
 
 	#[inline]
-	pub fn pop_right(&mut self) -> Result<(usize, Item<K, V>), WouldUnderflow> {
+	pub fn pop_right(&mut self) -> Result<(Offset, Item<K, V>), WouldUnderflow> {
 		if self.item_count() < M/2 {
 			Err(WouldUnderflow)
 		} else {
 			let offset = self.items.len();
 			let item = self.items.pop().unwrap();
-			Ok((offset, item))
+			Ok((offset.into(), item))
 		}
 	}
 
@@ -217,15 +224,21 @@ impl<K, V> Leaf<K, V> {
 
 	/// It is assumed that the leaf will not overflow.
 	#[inline]
-	pub fn insert(&mut self, offset: usize, item: Item<K, V>) {
-		self.items.insert(offset, item)
+	pub fn insert(&mut self, offset: Offset, item: Item<K, V>) {
+		match offset.value() {
+			Some(offset) => self.items.insert(offset, item),
+			None => panic!("Offset out of bounds")
+		}
 	}
 
 	/// Remove the item at the given offset.
 	/// Return the new balance of the leaf.
 	#[inline]
-	pub fn remove(&mut self, offset: usize) -> Item<K, V> {
-		self.items.remove(offset)
+	pub fn remove(&mut self, offset: Offset) -> Item<K, V> {
+		match offset.value() {
+			Some(offset) => self.items.remove(offset),
+			None => panic!("Offset out of bounds")
+		}
 	}
 
 	#[inline]

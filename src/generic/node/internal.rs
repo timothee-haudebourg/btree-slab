@@ -8,6 +8,7 @@ use crate::{
 		map::M,
 		node::{
 			Item,
+			Offset,
 			Keyed,
 			Children,
 			ChildrenWithSeparators,
@@ -231,11 +232,11 @@ impl<K, V> Internal<K, V> {
 	/// If the key matches no item in this node,
 	/// this funtion returns the index and id of the child that may match the key.
 	#[inline]
-	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<usize, (usize, usize)> where K: Borrow<Q>, Q: Ord {
+	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<Offset, (usize, usize)> where K: Borrow<Q>, Q: Ord {
 		match binary_search_min(&self.other_children, key) {
 			Some(offset) => {
 				if self.other_children[offset].item.key().borrow() == key {
-					Ok(offset)
+					Ok(offset.into())
 				} else {
 					let id = self.other_children[offset].child;
 					Err((offset+1, id))
@@ -256,16 +257,16 @@ impl<K, V> Internal<K, V> {
 	}
 
 	#[inline]
-	pub fn item(&self, offset: usize) -> Option<&Item<K, V>> {
-		match self.other_children.get(offset) {
+	pub fn item(&self, offset: Offset) -> Option<&Item<K, V>> {
+		match self.other_children.get(offset.unwrap()) {
 			Some(b) => Some(&b.item),
 			None => None
 		}
 	}
 
 	#[inline]
-	pub fn item_mut(&mut self, offset: usize) -> Option<&mut Item<K, V>> {
-		match self.other_children.get_mut(offset) {
+	pub fn item_mut(&mut self, offset: Offset) -> Option<&mut Item<K, V>> {
+		match self.other_children.get_mut(offset.unwrap()) {
 			Some(b) => Some(&mut b.item),
 			None => None
 		}
@@ -273,12 +274,12 @@ impl<K, V> Internal<K, V> {
 
 	/// Insert by key
 	#[inline]
-	pub fn insert_by_key(&mut self, key: K, mut value: V) -> Result<(usize, V), (K, V, usize, usize)> where K: Ord {
+	pub fn insert_by_key(&mut self, key: K, mut value: V) -> Result<(Offset, V), (K, V, usize, usize)> where K: Ord {
 		match binary_search_min(&self.other_children, &key) {
 			Some(i) => {
 				if self.other_children[i].item.key() == &key {
 					std::mem::swap(&mut value, self.other_children[i].item.value_mut());
-					Ok((i, value))
+					Ok((i.into(), value))
 				} else {
 					Err((key, value, i+1, self.other_children[i].child))
 				}
@@ -308,8 +309,8 @@ impl<K, V> Internal<K, V> {
 
 	/// Insert item at the given offset.
 	#[inline]
-	pub fn insert(&mut self, offset: usize, item: Item<K, V>, right_node_id: usize) {
-		self.other_children.insert(offset, Branch {
+	pub fn insert(&mut self, offset: Offset, item: Item<K, V>, right_node_id: usize) {
+		self.other_children.insert(offset.unwrap(), Branch {
 			item,
 			child: right_node_id
 		});
@@ -317,8 +318,8 @@ impl<K, V> Internal<K, V> {
 
 	/// Replace the item at the given offset.
 	#[inline]
-	pub fn replace(&mut self, offset: usize, mut item: Item<K, V>) -> Item<K, V> {
-		std::mem::swap(&mut item, &mut self.other_children[offset].item);
+	pub fn replace(&mut self, offset: Offset, mut item: Item<K, V>) -> Item<K, V> {
+		std::mem::swap(&mut item, &mut self.other_children[offset.unwrap()].item);
 		item
 	}
 
@@ -326,7 +327,8 @@ impl<K, V> Internal<K, V> {
 	/// Return the child id on the left of the item, the item, and the child id on the right
 	/// (which is also removed).
 	#[inline]
-	pub fn remove(&mut self, offset: usize) -> (usize, Item<K, V>, usize) {
+	pub fn remove(&mut self, offset: Offset) -> (usize, Item<K, V>, usize) {
+		let offset = offset.unwrap();
 		let left_child_id = self.child_id(offset);
 		let b = self.other_children.remove(offset);
 		(left_child_id, b.item, b.child)
@@ -394,28 +396,28 @@ impl<K, V> Internal<K, V> {
 	}
 
 	#[inline]
-	pub fn push_right(&mut self, item: Item<K, V>, child_id: usize) -> usize {
+	pub fn push_right(&mut self, item: Item<K, V>, child_id: usize) -> Offset {
 		let offset = self.other_children.len();
 		self.other_children.push(Branch {
 			item,
 			child: child_id
 		});
-		offset
+		offset.into()
 	}
 
 	#[inline]
-	pub fn pop_right(&mut self) -> Result<(usize, Item<K, V>, usize), WouldUnderflow> {
+	pub fn pop_right(&mut self) -> Result<(Offset, Item<K, V>, usize), WouldUnderflow> {
 		if self.item_count() <= UNDERFLOW {
 			Err(WouldUnderflow)
 		} else {
 			let offset = self.other_children.len();
 			let last = self.other_children.pop().unwrap();
-			Ok((offset, last.item, last.child))
+			Ok((offset.into(), last.item, last.child))
 		}
 	}
 
 	#[inline]
-	pub fn append(&mut self, separator: Item<K, V>, mut other: Internal<K, V>) -> usize {
+	pub fn append(&mut self, separator: Item<K, V>, mut other: Internal<K, V>) -> Offset {
 		let offset = self.other_children.len();
 		self.other_children.push(Branch {
 			item: separator,
@@ -423,7 +425,7 @@ impl<K, V> Internal<K, V> {
 		});
 
 		self.other_children.append(&mut other.other_children);
-		offset
+		offset.into()
 	}
 
 	/// Write the label of the internal node in the DOT format.

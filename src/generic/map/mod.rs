@@ -389,7 +389,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// or if this sibling would underflow.
 	#[inline]
 	fn try_rotate_left(&mut self, id: usize, deficient_child_index: usize, addr: &mut ItemAddr) -> bool {
-		let pivot_offset = deficient_child_index;
+		let pivot_offset = deficient_child_index.into();
 		let right_sibling_index = deficient_child_index + 1;
 		let (right_sibling_id, deficient_child_id) = {
 			let node = self.node(id);
@@ -419,7 +419,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 						addr.offset = pivot_offset;
 					} else {
 						// addressed item stays on right.
-						addr.offset -= 1;
+						addr.offset.decr();
 					}
 				} else if addr.id == id { // addressed item is in the parent node.
 					if addr.offset == pivot_offset {
@@ -443,7 +443,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 	fn try_rotate_right(&mut self, id: usize, deficient_child_index: usize, addr: &mut ItemAddr) -> bool {
 		if deficient_child_index > 0 {
 			let left_sibling_index = deficient_child_index - 1;
-			let pivot_offset = left_sibling_index;
+			let pivot_offset = left_sibling_index.into();
 			let (left_sibling_id, deficient_child_id) = {
 				let node = self.node(id);
 				(node.child_id(left_sibling_index), node.child_id(deficient_child_index))
@@ -460,7 +460,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 
 					// update address.
 					if addr.id == deficient_child_id { // addressed item is in the right (deficient) node.
-						addr.offset += 1;
+						addr.offset.incr();
 					} else if addr.id == left_sibling_id { // addressed item is in the left node.
 						if addr.offset == left_offset {
 							// addressed item is moving to pivot.
@@ -471,7 +471,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 						if addr.offset == pivot_offset {
 							// addressed item is the pivot, moving to the left (deficient) node.
 							addr.id = deficient_child_id;
-							addr.offset = 0;
+							addr.offset = 0.into();
 						}
 					}
 
@@ -510,11 +510,11 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 				addr.id = left_id;
 				addr.offset = left_offset;
 			} else if addr.offset > offset {
-				addr.offset -= 1;
+				addr.offset.decr();
 			}
 		} else if addr.id == right_id {
 			addr.id = left_id;
-			addr.offset += left_offset + 1;
+			addr.offset = (addr.offset.unwrap() + left_offset.unwrap() + 1).into();
 		}
 
 		(balance, addr)
