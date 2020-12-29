@@ -717,7 +717,6 @@ impl<K, V, C: ContainerMut<Node<K, V>>> Iterator for IntoIter<K, V, C> {
 						self.addr = self.btree.next_back_address(addr); // an item address is always followed by a valid address.
 		
 						while let Some(addr) = self.addr {
-							// eprintln!("query: {}", self.addr);
 							if addr.offset < self.btree.node(addr.id).item_count() {
 								break // we have found an item address.
 							} else {
