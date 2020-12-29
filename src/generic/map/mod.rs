@@ -544,15 +544,22 @@ pub struct Iter<'a, K, V, C: Container<Node<K, V>> = Slab<Node<K, V>>> {
 	btree: &'a BTreeMap<K, V, C>,
 
 	/// Address of the next item.
-	addr: Option<ItemAddr>
+	addr: Option<ItemAddr>,
+
+	end: Option<ItemAddr>,
+
+	len: usize
 }
 
 impl<'a, K, V, C: Container<Node<K, V>>> Iter<'a, K, V, C> {
 	pub fn new(btree: &'a BTreeMap<K, V, C>) -> Self {
 		let addr = btree.first_item_address();
+		let len = btree.len();
 		Iter {
 			btree,
-			addr
+			addr,
+			end: None,
+			len
 		}
 	}
 }
@@ -560,14 +567,46 @@ impl<'a, K, V, C: Container<Node<K, V>>> Iter<'a, K, V, C> {
 impl<'a, K, V, C: Container<Node<K, V>>> Iterator for Iter<'a, K, V, C> {
 	type Item = (&'a K, &'a V);
 
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		(self.len, Some(self.len))
+	}
+
 	fn next(&mut self) -> Option<(&'a K, &'a V)> {
 		match self.addr {
 			Some(addr) => {
-				let item = self.btree.item(addr).unwrap();
-				self.addr = self.btree.next_item_address(addr);
-				Some((item.key(), item.value()))
+				if self.len > 0 {
+					self.len -= 1;
+
+					let item = self.btree.item(addr).unwrap();
+					self.addr = self.btree.next_item_address(addr);
+					Some((item.key(), item.value()))
+				} else {
+					None
+				}
 			},
 			None => None
+		}
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for Iter<'a, K, V, C> { }
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::ExactSizeIterator for Iter<'a, K, V, C> { }
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for Iter<'a, K, V, C> {
+	fn next_back(&mut self) -> Option<(&'a K, &'a V)> {
+		if self.len > 0 {
+			let addr = match self.end {
+				Some(addr) =>  self.btree.previous_item_address(addr).unwrap(),
+				None => self.btree.last_item_address().unwrap()
+			};
+
+			self.len -= 1;
+
+			let item = self.btree.item(addr).unwrap();
+			self.end = Some(addr);
+			Some((item.key(), item.value()))
+		} else {
+			None
 		}
 	}
 }
@@ -587,16 +626,20 @@ pub struct IterMut<'a, K: 'a, V: 'a, C = Slab<Node<K, V>>> {
 	btree: &'a mut BTreeMap<K, V, C>,
 
 	/// Address of the next item, or last valid address.
-	addr: ItemAddr
+	addr: ItemAddr,
+
+	len: usize
 }
 
 impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	/// Create a new iterator over all the items of the map.
 	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> IterMut<'a, K, V, C> {
 		let addr = btree.first_back_address();
+		let len = btree.len();
 		IterMut {
 			btree,
-			addr
+			addr,
+			len
 		}
 	}
 
@@ -610,6 +653,7 @@ impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 		let after_addr = self.btree.next_item_or_back_address(self.addr);
 		match self.btree.item_mut(self.addr) {
 			Some(item) => unsafe {
+				self.len -= 1;
 				self.addr = after_addr.unwrap();
 				Some(std::mem::transmute(item as *mut _)) // this is safe because only one mutable reference to the same item can be emitted.
 			},
@@ -631,12 +675,14 @@ impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	pub fn insert(&mut self, key: K, value: V) {
 		let addr = self.btree.insert_at(self.addr, Item::new(key, value));
 		self.btree.next_item_or_back_address(addr);
+		self.len += 1;
 	}
 
 	/// Remove the next item and return it.
 	pub fn remove(&mut self) -> Option<Item<K, V>> {
 		match self.btree.remove_at(self.addr) {
 			Some((item, addr)) => {
+				self.len -= 1;
 				self.addr = addr;
 				Some(item)
 			},
@@ -647,6 +693,10 @@ impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 
 impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for IterMut<'a, K, V, C> {
 	type Item = (&'a K, &'a mut V);
+
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		(self.len, Some(self.len))
+	}
 
 	fn next(&mut self) -> Option<(&'a K, &'a mut V)> {
 		match self.next() {
