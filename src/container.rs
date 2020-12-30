@@ -5,6 +5,8 @@ pub trait Container<T> {
 }
 
 pub trait ContainerMut<T>: Container<T> {
+	fn clear(&mut self);
+
 	fn get_mut(&mut self, id: usize) -> Option<&mut T>;
 
 	fn insert(&mut self, t: T) -> usize;
@@ -25,6 +27,10 @@ impl<'a, T, C: Container<T>> Container<T> for &'a mut C {
 }
 
 impl<'a, T, C: ContainerMut<T>> ContainerMut<T> for &'a mut C {
+	fn clear(&mut self) {
+		C::clear(*self)
+	}
+
 	fn get_mut(&mut self, id: usize) -> Option<&mut T> {
 		C::get_mut(*self, id)
 	}
@@ -45,6 +51,10 @@ impl<T> Container<T> for Slab<T> {
 }
 
 impl<T> ContainerMut<T> for Slab<T> {
+	fn clear(&mut self) {
+		self.clear()
+	}
+
 	fn get_mut(&mut self, id: usize) -> Option<&mut T> {
 		self.get_mut(id)
 	}

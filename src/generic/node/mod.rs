@@ -149,6 +149,7 @@ pub enum Balance {
 pub struct WouldUnderflow;
 
 /// B-tree node.
+#[derive(Clone)]
 pub enum Node<K, V> {
 	/// Internal node.
 	Internal(InternalNode<K, V>),

@@ -5,12 +5,23 @@ use std::{
 use super::Keyed;
 
 pub struct Item<K, V> {
+	/// # Safety
+	///
+	/// This field must always be initialized when the item is accessed and/or dropped.
 	key: MaybeUninit<K>,
 
 	/// # Safety
 	///
 	/// This field must always be initialized when the item is accessed and/or dropped.
 	value: MaybeUninit<V>
+}
+
+impl<K: Clone, V: Clone> Clone for Item<K, V> {
+	fn clone(&self) -> Self {
+		unsafe {
+			Self::new(self.key.assume_init_ref().clone(), self.value.assume_init_ref().clone())
+		}
+	}
 }
 
 impl<K, V> AsRef<Item<K, V>> for Item<K, V> {

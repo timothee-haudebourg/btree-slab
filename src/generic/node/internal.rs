@@ -21,6 +21,7 @@ use crate::{
 
 const UNDERFLOW: usize = M/2 - 1;
 
+#[derive(Clone)]
 pub struct Branch<K, V> {
 	pub item: Item<K, V>,
 	pub child: usize
@@ -70,6 +71,7 @@ impl<K: Ord + PartialEq, V> PartialOrd for Branch<K, V> {
 	}
 }
 
+#[derive(Clone)]
 pub struct Internal<K, V> {
 	parent: usize,
 	first_child: usize,

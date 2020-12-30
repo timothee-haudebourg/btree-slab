@@ -1,9 +1,13 @@
 use std::{
 	borrow::Borrow,
 	marker::PhantomData,
-	ops::Index
+	ops::Index,
+	cmp::Ordering,
+	hash::{
+		Hash,
+		Hasher
+	}
 };
-use slab::Slab;
 use crate::{
 	generic::{
 		node::{
@@ -115,7 +119,8 @@ pub const M: usize = 8;
 /// to any other key, as determined by the [`Ord`] trait, changes while it is in the map.
 /// This is normally only possible through [`Cell`](`std::cell::Cell`),
 /// [`RefCell`](`std::cell::RefCell`), global state, I/O, or unsafe code.
-pub struct BTreeMap<K, V, C = Slab<Node<K, V>>> {
+#[derive(Clone)]
+pub struct BTreeMap<K, V, C> {
 	/// Allocated and free nodes.
 	nodes: C,
 
@@ -183,7 +188,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Examples
 	///
 	/// ```
-	/// use std::collections::BTreeMap;
+	/// use local_btree::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert(1, "a");
@@ -201,6 +206,55 @@ impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
 				Some((item.key(), item.value()))
 			},
 			Err(_) => None
+		}
+	}
+
+	/// Returns the first key-value pair in the map.
+	/// The key in this pair is the minimum key in the map.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// assert_eq!(map.first_key_value(), None);
+	/// map.insert(1, "b");
+	/// map.insert(2, "a");
+	/// assert_eq!(map.first_key_value(), Some((&1, &"b")));
+	/// ```
+	pub fn first_key_value(&self) -> Option<(&K, &V)> {
+		match self.first_item_address() {
+			Some(addr) => {
+				let item = self.item(addr).unwrap();
+				Some((item.key(), item.value()))
+			},
+			None => None
+		}
+	}
+
+	/// Returns the last key-value pair in the map.
+	/// The key in this pair is the maximum key in the map.
+	///
+	/// # Examples
+	///
+	/// Basic usage:
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(1, "b");
+	/// map.insert(2, "a");
+	/// assert_eq!(map.last_key_value(), Some((&2, &"a")));
+	/// ```
+	pub fn last_key_value(&self) -> Option<(&K, &V)> {
+		match self.last_item_address() {
+			Some(addr) => {
+				let item = self.item(addr).unwrap();
+				Some((item.key(), item.value()))
+			},
+			None => None
 		}
 	}
 
@@ -270,6 +324,24 @@ impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
 }
 
 impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
+	/// Clears the map, removing all elements.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut a = BTreeMap::new();
+	/// a.insert(1, "a");
+	/// a.clear();
+	/// assert!(a.is_empty());
+	/// ```
+	pub fn clear(&mut self) {
+		self.root = None;
+		self.len = 0;
+		self.nodes.clear()
+	}
+
 	#[inline]
 	pub fn get_mut(&mut self, key: &K) -> Option<&mut V> where K: Ord {
 		match self.root {
@@ -280,7 +352,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 
 	/// Gets the given key's corresponding entry in the map for in-place manipulation.
 	///
-	/// # Examples
+	/// # Example
 	///
 	/// ```
 	/// use local_btree::BTreeMap;
@@ -316,6 +388,68 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 		}
 	}
 
+	/// Returns the first entry in the map for in-place manipulation.
+	/// The key of this entry is the minimum key in the map.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(1, "a");
+	/// map.insert(2, "b");
+	/// if let Some(mut entry) = map.first_entry() {
+	///     if *entry.key() > 0 {
+	///         entry.insert("first");
+	///     }
+	/// }
+	/// assert_eq!(*map.get(&1).unwrap(), "first");
+	/// assert_eq!(*map.get(&2).unwrap(), "b");
+	/// ```
+	pub fn first_entry(&mut self) -> Option<OccupiedEntry<K, V, C>> {
+		match self.first_item_address() {
+			Some(addr) => {
+				Some(OccupiedEntry {
+					map: self,
+					addr
+				})
+			},
+			None => None
+		}
+	}
+
+	/// Returns the last entry in the map for in-place manipulation.
+	/// The key of this entry is the maximum key in the map.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(1, "a");
+	/// map.insert(2, "b");
+	/// if let Some(mut entry) = map.last_entry() {
+	///     if *entry.key() > 0 {
+	///         entry.insert("last");
+	///     }
+	/// }
+	/// assert_eq!(*map.get(&1).unwrap(), "a");
+	/// assert_eq!(*map.get(&2).unwrap(), "last");
+	/// ```
+	pub fn last_entry(&mut self) -> Option<OccupiedEntry<K, V, C>> {
+		match self.last_item_address() {
+			Some(addr) => {
+				Some(OccupiedEntry {
+					map: self,
+					addr
+				})
+			},
+			None => None
+		}
+	}
+
 	/// Insert a key-value pair in the tree.
 	#[inline]
 	pub fn insert(&mut self, key: K, value: V) -> Option<V> where K: Ord {
@@ -330,13 +464,114 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 		}
 	}
 
-	// Delete an item by key.
+	/// Removes and returns the first element in the map.
+	/// The key of this element is the minimum key that was in the map.
+	///
+	/// # Example
+	///
+	/// Draining elements in ascending order, while keeping a usable map each iteration.
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(1, "a");
+	/// map.insert(2, "b");
+	/// while let Some((key, _val)) = map.pop_first() {
+	///     assert!(map.iter().all(|(k, _v)| *k > key));
+	/// }
+	/// assert!(map.is_empty());
+	/// ```
+	pub fn pop_first(&mut self) -> Option<(K, V)> {
+		self.first_entry().map(|entry| entry.remove_entry())
+	}
+
+	/// Removes and returns the last element in the map.
+	/// The key of this element is the maximum key that was in the map.
+	///
+	/// # Example
+	///
+	/// Draining elements in descending order, while keeping a usable map each iteration.
+	///
+	/// ```
+	/// #![feature(map_first_last)]
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(1, "a");
+	/// map.insert(2, "b");
+	/// while let Some((key, _val)) = map.pop_last() {
+	///     assert!(map.iter().all(|(k, _v)| *k < key));
+	/// }
+	/// assert!(map.is_empty());
+	/// ```
+	pub fn pop_last(&mut self) -> Option<(K, V)> {
+		self.last_entry().map(|entry| entry.remove_entry())
+	}
+
+	/// Removes a key from the map, returning the value at the key if the key
+	/// was previously in the map.
+	///
+	/// The key may be any borrowed form of the map's key type, but the ordering
+	/// on the borrowed form *must* match the ordering on the key type.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(1, "a");
+	/// assert_eq!(map.remove(&1), Some("a"));
+	/// assert_eq!(map.remove(&1), None);
+	/// ```
 	#[inline]
 	pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V> where K: Borrow<Q>, Q: Ord {
 		match self.address_of(key) {
 			Ok(addr) => {
 				let (item, _) = self.remove_at(addr).unwrap();
 				Some(item.into_value())
+			},
+			Err(_) => None
+		}
+	}
+
+	/// Removes a key from the map, returning the stored key and value if the key
+	/// was previously in the map.
+	///
+	/// The key may be any borrowed form of the map's key type, but the ordering
+	/// on the borrowed form *must* match the ordering on the key type.
+	///
+	/// # Example
+	///
+	/// Basic usage:
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(1, "a");
+	/// assert_eq!(map.remove_entry(&1), Some((1, "a")));
+	/// assert_eq!(map.remove_entry(&1), None);
+	/// ```
+	#[inline]
+	pub fn remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)> where K: Borrow<Q>, Q: Ord {
+		match self.address_of(key) {
+			Ok(addr) => {
+				let (item, _) = self.remove_at(addr).unwrap();
+				Some(item.into_pair())
+			},
+			Err(_) => None
+		}
+	}
+
+	/// Removes and returns the binding in the map, if any, of which key matches the given one.
+	#[inline]
+	pub fn take<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)> where K: Borrow<Q>, Q: Ord {
+		match self.address_of(key) {
+			Ok(addr) => {
+				let (item, _) = self.remove_at(addr).unwrap();
+				Some(item.into_pair())
 			},
 			Err(_) => None
 		}
@@ -376,6 +611,39 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 	#[inline]
 	pub fn iter_mut(&mut self) -> IterMut<K, V, C> {
 		IterMut::new(self)
+	}
+
+	/// Creates an iterator which uses a closure to determine if an element should be removed.
+	///
+	/// If the closure returns true, the element is removed from the map and yielded.
+	/// If the closure returns false, or panics, the element remains in the map and will not be
+	/// yielded.
+	///
+	/// Note that `drain_filter` lets you mutate every value in the filter closure, regardless of
+	/// whether you choose to keep or remove it.
+	///
+	/// If the iterator is only partially consumed or not consumed at all, each of the remaining
+	/// elements will still be subjected to the closure and removed and dropped if it returns true.
+	///
+	/// It is unspecified how many more elements will be subjected to the closure
+	/// if a panic occurs in the closure, or a panic occurs while dropping an element,
+	/// or if the `DrainFilter` value is leaked.
+	///
+	/// # Example
+	///
+	/// Splitting a map into even and odd keys, reusing the original map:
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map: BTreeMap<i32, i32> = (0..8).map(|x| (x, x)).collect();
+	/// let evens: BTreeMap<_, _> = map.drain_filter(|k, _v| k % 2 == 0).collect();
+	/// let odds = map;
+	/// assert_eq!(evens.keys().copied().collect::<Vec<_>>(), vec![0, 2, 4, 6]);
+	/// assert_eq!(odds.keys().copied().collect::<Vec<_>>(), vec![1, 3, 5, 7]);
+	/// ```
+	pub fn drain_filter<F>(&mut self, pred: F) -> DrainFilter<K, V, C, F> where F: FnMut(&K, &mut V) -> bool {
+		DrainFilter::new(self, pred)
 	}
 
 	#[inline]
@@ -521,7 +789,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 	}
 }
 
-impl<K: Ord, Q: ?Sized, V> Index<&Q> for BTreeMap<K, V>
+impl<K: Ord, Q: ?Sized, V, C: Container<Node<K, V>>> Index<&Q> for BTreeMap<K, V, C>
 where
 	K: Borrow<Q>,
 	Q: Ord,
@@ -539,7 +807,93 @@ where
 	}
 }
 
-pub struct Iter<'a, K, V, C: Container<Node<K, V>> = Slab<Node<K, V>>> {
+impl<K, L: PartialEq<K>, V, W: PartialEq<V>, C: Container<Node<K, V>>, D: Container<Node<L, W>>> PartialEq<BTreeMap<L, W, D>> for BTreeMap<K, V, C> {
+	fn eq(&self, other: &BTreeMap<L, W, D>) -> bool {
+		if self.len() == other.len() {
+			let mut it1 = self.iter();
+			let mut it2 = other.iter();
+
+			loop {
+				match (it1.next(), it2.next()) {
+					(None, None) => break,
+					(Some((k, v)), Some((l, w))) => {
+						if l != k || w != v {
+							return false
+						}
+					},
+					_ => return false
+				}
+			}
+
+			true
+		} else {
+			false
+		}
+	}
+}
+
+impl<K: Eq, V: Eq, C: Container<Node<K, V>>> Eq for BTreeMap<K, V, C> {}
+
+impl<K, L: PartialOrd<K>, V, W: PartialOrd<V>, C: Container<Node<K, V>>, D: Container<Node<L, W>>> PartialOrd<BTreeMap<L, W, D>> for BTreeMap<K, V, C> {
+	fn partial_cmp(&self, other: &BTreeMap<L, W, D>) -> Option<Ordering> {
+		let mut it1 = self.iter();
+		let mut it2 = other.iter();
+
+		loop {
+			match (it1.next(), it2.next()) {
+				(None, None) => return Some(Ordering::Equal),
+				(_, None) => return Some(Ordering::Greater),
+				(None, _) => return Some(Ordering::Less),
+				(Some((k, v)), Some((l, w))) => match l.partial_cmp(k) {
+					Some(Ordering::Greater) => return Some(Ordering::Less),
+					Some(Ordering::Less) => return Some(Ordering::Greater),
+					Some(Ordering::Equal) => match w.partial_cmp(v) {
+						Some(Ordering::Greater) => return Some(Ordering::Less),
+						Some(Ordering::Less) => return Some(Ordering::Greater),
+						Some(Ordering::Equal) => (),
+						None => return None
+					},
+					None => return None
+				}
+			}
+		}
+	}
+}
+
+impl<K: Ord, V: Ord, C: Container<Node<K, V>>> Ord for BTreeMap<K, V, C> {
+	fn cmp(&self, other: &BTreeMap<K, V, C>) -> Ordering {
+		let mut it1 = self.iter();
+		let mut it2 = other.iter();
+
+		loop {
+			match (it1.next(), it2.next()) {
+				(None, None) => return Ordering::Equal,
+				(_, None) => return Ordering::Greater,
+				(None, _) => return Ordering::Less,
+				(Some((k, v)), Some((l, w))) => match l.cmp(k) {
+					Ordering::Greater => return Ordering::Less,
+					Ordering::Less => return Ordering::Greater,
+					Ordering::Equal => match w.cmp(v) {
+						Ordering::Greater => return Ordering::Less,
+						Ordering::Less => return Ordering::Greater,
+						Ordering::Equal => ()
+					}
+				}
+			}
+		}
+	}
+}
+
+impl<K: Hash, V: Hash, C: Container<Node<K, V>>> Hash for BTreeMap<K, V, C> {
+	fn hash<H: Hasher>(&self, h: &mut H) {
+		for (k, v) in self {
+			k.hash(h);
+			v.hash(h);
+		}
+	}
+}
+
+pub struct Iter<'a, K, V, C: Container<Node<K, V>>> {
 	/// The tree reference.
 	btree: &'a BTreeMap<K, V, C>,
 
@@ -621,7 +975,7 @@ impl<'a, K, V, C: Container<Node<K, V>>> IntoIterator for &'a BTreeMap<K, V, C> 
 }
 
 /// Iterator that can mutate the tree in place.
-pub struct IterMut<'a, K: 'a, V: 'a, C = Slab<Node<K, V>>> {
+pub struct IterMut<'a, K, V, C> {
 	/// The tree reference.
 	btree: &'a mut BTreeMap<K, V, C>,
 
@@ -631,7 +985,7 @@ pub struct IterMut<'a, K: 'a, V: 'a, C = Slab<Node<K, V>>> {
 	len: usize
 }
 
-impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	/// Create a new iterator over all the items of the map.
 	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> IterMut<'a, K, V, C> {
 		let addr = btree.first_back_address();
@@ -646,6 +1000,11 @@ impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	/// Get the next visited item without moving the iterator position.
 	pub fn peek(&'a self) -> Option<&'a Item<K, V>> {
 		self.btree.item(self.addr)
+	}
+
+	/// Get the next visited item without moving the iterator position.
+	pub fn peek_mut(&'a mut self) -> Option<&'a mut Item<K, V>> {
+		self.btree.item_mut(self.addr)
 	}
 
 	/// Get the next item and move the iterator to the next position.
@@ -715,7 +1074,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for IterMut<'a, K, V, C> {
 /// (provided by the `IntoIterator` trait). See its documentation for more.
 ///
 /// [`into_iter`]: IntoIterator::into_iter
-pub struct IntoIter<K, V, C: ContainerMut<Node<K, V>> = Slab<Node<K, V>>> {
+pub struct IntoIter<K, V, C: ContainerMut<Node<K, V>>> {
 	/// The tree reference.
 	btree: BTreeMap<K, V, C>,
 
@@ -875,5 +1234,66 @@ impl<K, V, C: ContainerMut<Node<K, V>>> IntoIterator for BTreeMap<K, V, C> {
 
 	fn into_iter(self) -> IntoIter<K, V, C> {
 		self.into_iter()
+	}
+}
+
+pub struct DrainFilter<'a, K, V, C, F> where F: FnMut(&K, &mut V) -> bool {
+	pred: F,
+
+	/// The tree reference.
+	btree: &'a mut BTreeMap<K, V, C>,
+
+	/// Address of the next item, or last valid address.
+	addr: ItemAddr,
+
+	len: usize
+}
+
+impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>, F> DrainFilter<'a, K, V, C, F> where F: FnMut(&K, &mut V) -> bool {
+	pub fn new(btree: &'a mut BTreeMap<K, V, C>, pred: F) -> Self {
+		let addr = btree.first_back_address();
+		let len = btree.len();
+		DrainFilter {
+			pred,
+			btree,
+			addr,
+			len
+		}
+	}
+
+	fn next(&mut self) -> Option<Item<K, V>> {
+		loop {
+			match self.btree.item_mut(self.addr) {
+				Some(item) => {
+					let (key, value) = item.as_pair_mut();
+					self.len -= 1;
+					if (self.pred)(key, value) {
+						let (item, next_addr) = self.btree.remove_at(self.addr).unwrap();
+						self.addr = next_addr;
+						return Some(item)
+					} else {
+						self.addr = self.btree.next_item_or_back_address(self.addr).unwrap();
+					}
+				},
+				None => return None
+			}
+		}
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>, F> std::iter::FusedIterator for DrainFilter<'a, K, V, C, F> where F: FnMut(&K, &mut V) -> bool { }
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>, F> Iterator for DrainFilter<'a, K, V, C, F> where F: FnMut(&K, &mut V) -> bool {
+	type Item = (K, V);
+
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		(0, Some(self.len))
+	}
+
+	fn next(&mut self) -> Option<(K, V)> {
+		match self.next() {
+			Some(item) => Some(item.into_pair()),
+			None => None
+		}
 	}
 }

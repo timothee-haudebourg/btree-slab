@@ -4,7 +4,7 @@
 
 use slab::Slab;
 
-pub mod utils;
+pub(crate) mod utils;
 mod container;
 pub mod generic;
 
@@ -13,5 +13,8 @@ pub use container::{
 	ContainerMut
 };
 
-/// B-Tree based on `Slab`.
+/// B-Tree map based on `Slab`.
 pub type BTreeMap<K, V> = generic::BTreeMap<K, V, Slab<generic::Node<K, V>>>;
+
+/// B-Tree set based on `Slab`.
+pub type BTreeSet<T> = generic::BTreeSet<T, Slab<generic::Node<T, ()>>>;

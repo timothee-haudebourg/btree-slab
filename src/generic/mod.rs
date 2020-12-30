@@ -6,3 +6,6 @@ pub use node::Node;
 
 pub mod map;
 pub use map::BTreeMap;
+
+pub mod set;
+pub use set::BTreeSet;

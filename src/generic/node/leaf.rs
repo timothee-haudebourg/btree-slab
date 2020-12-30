@@ -15,6 +15,7 @@ use crate::{
 	utils::binary_search_min
 };
 
+#[derive(Clone)]
 pub struct Leaf<K, V> {
 	parent: usize,
 	items: StaticVec<Item<K, V>, {M+1}>
