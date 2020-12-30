@@ -263,6 +263,42 @@ impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
 		Iter::new(self)
 	}
 
+	/// Gets an iterator over the keys of the map, in sorted order.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut a = BTreeMap::new();
+	/// a.insert(2, "b");
+	/// a.insert(1, "a");
+	///
+	/// let keys: Vec<_> = a.keys().cloned().collect();
+	/// assert_eq!(keys, [1, 2]);
+	/// ```
+	pub fn keys(&self) -> Keys<K, V, C> {
+		Keys { inner: self.iter() }
+	}
+
+	/// Gets an iterator over the values of the map, in order by key.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut a = BTreeMap::new();
+	/// a.insert(1, "hello");
+	/// a.insert(2, "goodbye");
+	///
+	/// let values: Vec<&str> = a.values().cloned().collect();
+	/// assert_eq!(values, ["hello", "goodbye"]);
+	/// ```
+	pub fn values(&self) -> Values<K, V, C> {
+		Values { inner: self.iter() }
+	}
+
 	/// Returns `true` if the map contains a value for the specified key.
 	///
 	/// The key may be any borrowed form of the map's key type, but the ordering
@@ -613,6 +649,29 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 		IterMut::new(self)
 	}
 
+	/// Gets a mutable iterator over the values of the map, in order by key.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut a = BTreeMap::new();
+	/// a.insert(1, String::from("hello"));
+	/// a.insert(2, String::from("goodbye"));
+	///
+	/// for value in a.values_mut() {
+	///     value.push_str("!");
+	/// }
+	///
+	/// let values: Vec<String> = a.values().cloned().collect();
+	/// assert_eq!(values, [String::from("hello!"),
+	///                     String::from("goodbye!")]);
+	/// ```
+	pub fn values_mut(&mut self) -> ValuesMut<K, V, C> {
+		ValuesMut { inner: self.iter_mut() }
+	}
+
 	/// Creates an iterator which uses a closure to determine if an element should be removed.
 	///
 	/// If the closure returns true, the element is removed from the map and yielded.
@@ -649,6 +708,48 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 	#[inline]
 	pub fn into_iter(self) -> IntoIter<K, V, C> {
 		IntoIter::new(self)
+	}
+
+	/// Creates a consuming iterator visiting all the keys, in sorted order.
+	/// The map cannot be used after calling this.
+	/// The iterator element type is `K`.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut a = BTreeMap::new();
+	/// a.insert(2, "b");
+	/// a.insert(1, "a");
+	///
+	/// let keys: Vec<i32> = a.into_keys().collect();
+	/// assert_eq!(keys, [1, 2]);
+	/// ```
+	#[inline]
+	pub fn into_keys(self) -> IntoKeys<K, V, C> {
+		IntoKeys { inner: self.into_iter() }
+	}
+
+	/// Creates a consuming iterator visiting all the values, in order by key.
+	/// The map cannot be used after calling this.
+	/// The iterator element type is `V`.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut a = BTreeMap::new();
+	/// a.insert(1, "hello");
+	/// a.insert(2, "goodbye");
+	///
+	/// let values: Vec<&str> = a.into_values().collect();
+	/// assert_eq!(values, ["hello", "goodbye"]);
+	/// ```
+	#[inline]
+	pub fn into_values(self) -> IntoValues<K, V, C> {
+		IntoValues { inner: self.into_iter() }
 	}
 
 	/// Try to rotate left the node `id` to benefits the child number `deficient_child_index`.
@@ -893,7 +994,7 @@ impl<K: Hash, V: Hash, C: Container<Node<K, V>>> Hash for BTreeMap<K, V, C> {
 	}
 }
 
-pub struct Iter<'a, K, V, C: Container<Node<K, V>>> {
+pub struct Iter<'a, K, V, C> {
 	/// The tree reference.
 	btree: &'a BTreeMap<K, V, C>,
 
@@ -974,8 +1075,94 @@ impl<'a, K, V, C: Container<Node<K, V>>> IntoIterator for &'a BTreeMap<K, V, C> 
 	}
 }
 
-/// Iterator that can mutate the tree in place.
 pub struct IterMut<'a, K, V, C> {
+	/// The tree reference.
+	btree: &'a mut BTreeMap<K, V, C>,
+
+	/// Address of the next item.
+	addr: Option<ItemAddr>,
+
+	end: Option<ItemAddr>,
+
+	len: usize
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
+	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> Self {
+		let addr = btree.first_item_address();
+		let len = btree.len();
+		IterMut {
+			btree,
+			addr,
+			end: None,
+			len
+		}
+	}
+
+	fn next_item(&mut self) -> Option<&'a mut Item<K, V>> {
+		match self.addr {
+			Some(addr) => {
+				if self.len > 0 {
+					self.len -= 1;
+
+					self.addr = self.btree.next_item_address(addr);
+					let item = self.btree.item_mut(addr).unwrap();
+					Some(unsafe { std::mem::transmute(item) }) // this is safe because only one mutable reference to the same item can be emitted.
+				} else {
+					None
+				}
+			},
+			None => None
+		}
+	}
+
+	fn next_back_item(&mut self) -> Option<&'a mut Item<K, V>> {
+		if self.len > 0 {
+			let addr = match self.end {
+				Some(addr) =>  self.btree.previous_item_address(addr).unwrap(),
+				None => self.btree.last_item_address().unwrap()
+			};
+
+			self.len -= 1;
+
+			let item = self.btree.item_mut(addr).unwrap();
+			self.end = Some(addr);
+			Some(unsafe { std::mem::transmute(item) }) // this is safe because only one mutable reference to the same item can be emitted.s
+		} else {
+			None
+		}
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for IterMut<'a, K, V, C> {
+	type Item = (&'a K, &'a mut V);
+
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		(self.len, Some(self.len))
+	}
+
+	fn next(&mut self) -> Option<(&'a K, &'a mut V)> {
+		self.next_item().map(|item| {
+			let (key, value) = item.as_pair_mut();
+			(key as &'a K, value)
+		})
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for IterMut<'a, K, V, C> { }
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::ExactSizeIterator for IterMut<'a, K, V, C> { }
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for IterMut<'a, K, V, C> {
+	fn next_back(&mut self) -> Option<(&'a K, &'a mut V)> {
+		self.next_back_item().map(|item| {
+			let (key, value) = item.as_pair_mut();
+			(key as &'a K, value)
+		})
+	}
+}
+
+/// Iterator that can mutate the tree in place.
+pub struct ScanMut<'a, K, V, C> {
 	/// The tree reference.
 	btree: &'a mut BTreeMap<K, V, C>,
 
@@ -985,12 +1172,12 @@ pub struct IterMut<'a, K, V, C> {
 	len: usize
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> ScanMut<'a, K, V, C> {
 	/// Create a new iterator over all the items of the map.
-	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> IterMut<'a, K, V, C> {
+	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> ScanMut<'a, K, V, C> {
 		let addr = btree.first_back_address();
 		let len = btree.len();
-		IterMut {
+		ScanMut {
 			btree,
 			addr,
 			len
@@ -1008,7 +1195,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	}
 
 	/// Get the next item and move the iterator to the next position.
-	pub fn next(&mut self) -> Option<&'a mut Item<K, V>> {
+	pub fn next_item(&mut self) -> Option<&'a mut Item<K, V>> {
 		let after_addr = self.btree.next_item_or_back_address(self.addr);
 		match self.btree.item_mut(self.addr) {
 			Some(item) => unsafe {
@@ -1050,7 +1237,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for IterMut<'a, K, V, C> {
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for ScanMut<'a, K, V, C> {
 	type Item = (&'a K, &'a mut V);
 
 	fn size_hint(&self) -> (usize, Option<usize>) {
@@ -1058,7 +1245,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for IterMut<'a, K, V, C> {
 	}
 
 	fn next(&mut self) -> Option<(&'a K, &'a mut V)> {
-		match self.next() {
+		match self.next_item() {
 			Some(item) => {
 				let (key, value) = item.as_pair_mut();
 				Some((key, value)) // coerce k from `&mut K` to `&K`
@@ -1074,7 +1261,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for IterMut<'a, K, V, C> {
 /// (provided by the `IntoIterator` trait). See its documentation for more.
 ///
 /// [`into_iter`]: IntoIterator::into_iter
-pub struct IntoIter<K, V, C: ContainerMut<Node<K, V>>> {
+pub struct IntoIter<K, V, C> {
 	/// The tree reference.
 	btree: BTreeMap<K, V, C>,
 
@@ -1261,7 +1448,7 @@ impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>, F> DrainFilter<'a, K, V, C, 
 		}
 	}
 
-	fn next(&mut self) -> Option<Item<K, V>> {
+	fn next_item(&mut self) -> Option<Item<K, V>> {
 		loop {
 			match self.btree.item_mut(self.addr) {
 				Some(item) => {
@@ -1291,9 +1478,128 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>, F> Iterator for DrainFilter<'a, K, V
 	}
 
 	fn next(&mut self) -> Option<(K, V)> {
-		match self.next() {
+		match self.next_item() {
 			Some(item) => Some(item.into_pair()),
 			None => None
 		}
+	}
+}
+
+pub struct Keys<'a, K, V, C> {
+	inner: Iter<'a, K, V, C>
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for Keys<'a, K, V, C> { }
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::ExactSizeIterator for Keys<'a, K, V, C> { }
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for Keys<'a, K, V, C> {
+	type Item = &'a K;
+
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		self.inner.size_hint()
+	}
+
+	fn next(&mut self) -> Option<&'a K> {
+		self.inner.next().map(|(k, _)| k)
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for Keys<'a, K, V, C> {
+	fn next_back(&mut self) -> Option<&'a K> {
+		self.inner.next_back().map(|(k, _)| k)
+	}
+}
+
+impl<K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for IntoKeys<K, V, C> { }
+impl<K, V, C: ContainerMut<Node<K, V>>> std::iter::ExactSizeIterator for IntoKeys<K, V, C> { }
+
+pub struct IntoKeys<K, V, C> {
+	inner: IntoIter<K, V, C>
+}
+
+impl<K, V, C: ContainerMut<Node<K, V>>> Iterator for IntoKeys<K, V, C> {
+	type Item = K;
+
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		self.inner.size_hint()
+	}
+
+	fn next(&mut self) -> Option<K> {
+		self.inner.next().map(|(k, _)| k)
+	}
+}
+
+impl<K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for IntoKeys<K, V, C> {
+	fn next_back(&mut self) -> Option<K> {
+		self.inner.next_back().map(|(k, _)| k)
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for Values<'a, K, V, C> { }
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::ExactSizeIterator for Values<'a, K, V, C> { }
+
+pub struct Values<'a, K, V, C> {
+	inner: Iter<'a, K, V, C>
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for Values<'a, K, V, C> {
+	type Item = &'a V;
+
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		self.inner.size_hint()
+	}
+
+	fn next(&mut self) -> Option<&'a V> {
+		self.inner.next().map(|(_, v)| v)
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for Values<'a, K, V, C> {
+	fn next_back(&mut self) -> Option<&'a V> {
+		self.inner.next_back().map(|(_, v)| v)
+	}
+}
+
+pub struct ValuesMut<'a, K, V, C> {
+	inner: IterMut<'a, K, V, C>
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for ValuesMut<'a, K, V, C> { }
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::ExactSizeIterator for ValuesMut<'a, K, V, C> { }
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for ValuesMut<'a, K, V, C> {
+	type Item = &'a mut V;
+
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		self.inner.size_hint()
+	}
+
+	fn next(&mut self) -> Option<&'a mut V> {
+		self.inner.next().map(|(_, v)| v)
+	}
+}
+
+pub struct IntoValues<K, V, C> {
+	inner: IntoIter<K, V, C>
+}
+
+impl<K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for IntoValues<K, V, C> { }
+impl<K, V, C: ContainerMut<Node<K, V>>> std::iter::ExactSizeIterator for IntoValues<K, V, C> { }
+
+impl<K, V, C: ContainerMut<Node<K, V>>> Iterator for IntoValues<K, V, C> {
+	type Item = V;
+
+	fn size_hint(&self) -> (usize, Option<usize>) {
+		self.inner.size_hint()
+	}
+
+	fn next(&mut self) -> Option<V> {
+		self.inner.next().map(|(_, v)| v)
+	}
+}
+
+impl<K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for IntoValues<K, V, C> {
+	fn next_back(&mut self) -> Option<V> {
+		self.inner.next_back().map(|(_, v)| v)
 	}
 }
