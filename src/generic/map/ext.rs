@@ -34,7 +34,7 @@ pub trait BTreeExt<K, V> {
 
 	/// Get the node associated to the given `id`.
 	///
-	/// Panics if `id` is out of bounds.usize::MAX
+	/// Panics if `id` is out of bounds.
 	fn node(&self, id: usize) -> &Node<K, V>;
 
 	fn get_in<Q: ?Sized>(&self, key: &Q, id: usize) -> Option<&V> where K: Borrow<Q>, Q: Ord;
