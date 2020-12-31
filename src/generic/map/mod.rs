@@ -1,7 +1,11 @@
 use std::{
 	borrow::Borrow,
 	marker::PhantomData,
-	ops::Index,
+	ops::{
+		Index,
+		Bound,
+		RangeBounds
+	},
 	cmp::Ordering,
 	hash::{
 		Hash,
@@ -261,6 +265,42 @@ impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
 	#[inline]
 	pub fn iter(&self) -> Iter<K, V, C> {
 		Iter::new(self)
+	}
+
+	/// Constructs a double-ended iterator over a sub-range of elements in the map.
+	/// The simplest way is to use the range syntax `min..max`, thus `range(min..max)` will
+	/// yield elements from min (inclusive) to max (exclusive).
+	/// The range may also be entered as `(Bound<T>, Bound<T>)`, so for example
+	/// `range((Excluded(4), Included(10)))` will yield a left-exclusive, right-inclusive
+	/// range from 4 to 10.
+	///
+	/// # Panics
+	///
+	/// Panics if range `start > end`.
+	/// Panics if range `start == end` and both bounds are `Excluded`.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	/// use std::ops::Bound::Included;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(3, "a");
+	/// map.insert(5, "b");
+	/// map.insert(8, "c");
+	/// for (&key, &value) in map.range((Included(&4), Included(&8))) {
+	///     println!("{}: {}", key, value);
+	/// }
+	/// assert_eq!(Some((&5, &"b")), map.range(4..).next());
+	/// ```
+	pub fn range<T: ?Sized, R>(&self, range: R) -> Range<K, V, C>
+	where
+		T: Ord,
+		K: Borrow<T>,
+		R: RangeBounds<T>,
+	{
+		Range::new(self, range)
 	}
 
 	/// Gets an iterator over the keys of the map, in sorted order.
@@ -652,6 +692,43 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 	#[inline]
 	pub fn bindings_mut(&mut self) -> BindingsMut<K, V, C> {
 		BindingsMut::new(self)
+	}
+
+	/// Constructs a mutable double-ended iterator over a sub-range of elements in the map.
+	/// The simplest way is to use the range syntax `min..max`, thus `range(min..max)` will
+	/// yield elements from min (inclusive) to max (exclusive).
+	/// The range may also be entered as `(Bound<T>, Bound<T>)`, so for example
+	/// `range((Excluded(4), Included(10)))` will yield a left-exclusive, right-inclusive
+	/// range from 4 to 10.
+	///
+	/// # Panics
+	///
+	/// Panics if range `start > end`.
+	/// Panics if range `start == end` and both bounds are `Excluded`.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map: BTreeMap<&str, i32> = ["Alice", "Bob", "Carol", "Cheryl"]
+	///     .iter()
+	///     .map(|&s| (s, 0))
+	///     .collect();
+	/// for (_, balance) in map.range_mut("B".."Cheryl") {
+	///     *balance += 100;
+	/// }
+	/// for (name, balance) in &map {
+	///     println!("{} => {}", name, balance);
+	/// }
+	/// ```
+	pub fn range_mut<T: ?Sized, R>(&mut self, range: R) -> RangeMut<K, V, C>
+	where
+		T: Ord,
+		K: Borrow<T>,
+		R: RangeBounds<T>,
+	{
+		RangeMut::new(self, range)
 	}
 
 	/// Gets a mutable iterator over the values of the map, in order by key.
@@ -1049,10 +1126,10 @@ impl<'a, K, V, C: Container<Node<K, V>>> Iterator for Iter<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for Iter<'a, K, V, C> { }
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::ExactSizeIterator for Iter<'a, K, V, C> { }
+impl<'a, K, V, C: Container<Node<K, V>>> std::iter::FusedIterator for Iter<'a, K, V, C> { }
+impl<'a, K, V, C: Container<Node<K, V>>> std::iter::ExactSizeIterator for Iter<'a, K, V, C> { }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for Iter<'a, K, V, C> {
+impl<'a, K, V, C: Container<Node<K, V>>> std::iter::DoubleEndedIterator for Iter<'a, K, V, C> {
 	fn next_back(&mut self) -> Option<(&'a K, &'a V)> {
 		if self.len > 0 {
 			let addr = match self.end {
@@ -1504,10 +1581,10 @@ pub struct Keys<'a, K, V, C> {
 	inner: Iter<'a, K, V, C>
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for Keys<'a, K, V, C> { }
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::ExactSizeIterator for Keys<'a, K, V, C> { }
+impl<'a, K, V, C: Container<Node<K, V>>> std::iter::FusedIterator for Keys<'a, K, V, C> { }
+impl<'a, K, V, C: Container<Node<K, V>>> std::iter::ExactSizeIterator for Keys<'a, K, V, C> { }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for Keys<'a, K, V, C> {
+impl<'a, K, V, C: Container<Node<K, V>>> Iterator for Keys<'a, K, V, C> {
 	type Item = &'a K;
 
 	fn size_hint(&self) -> (usize, Option<usize>) {
@@ -1519,7 +1596,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for Keys<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for Keys<'a, K, V, C> {
+impl<'a, K, V, C: Container<Node<K, V>>> std::iter::DoubleEndedIterator for Keys<'a, K, V, C> {
 	fn next_back(&mut self) -> Option<&'a K> {
 		self.inner.next_back().map(|(k, _)| k)
 	}
@@ -1550,14 +1627,14 @@ impl<K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for IntoK
 	}
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for Values<'a, K, V, C> { }
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::ExactSizeIterator for Values<'a, K, V, C> { }
+impl<'a, K, V, C: Container<Node<K, V>>> std::iter::FusedIterator for Values<'a, K, V, C> { }
+impl<'a, K, V, C: Container<Node<K, V>>> std::iter::ExactSizeIterator for Values<'a, K, V, C> { }
 
 pub struct Values<'a, K, V, C> {
 	inner: Iter<'a, K, V, C>
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for Values<'a, K, V, C> {
+impl<'a, K, V, C: Container<Node<K, V>>> Iterator for Values<'a, K, V, C> {
 	type Item = &'a V;
 
 	fn size_hint(&self) -> (usize, Option<usize>) {
@@ -1569,7 +1646,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for Values<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for Values<'a, K, V, C> {
+impl<'a, K, V, C: Container<Node<K, V>>> std::iter::DoubleEndedIterator for Values<'a, K, V, C> {
 	fn next_back(&mut self) -> Option<&'a V> {
 		self.inner.next_back().map(|(_, v)| v)
 	}
@@ -1616,5 +1693,202 @@ impl<K, V, C: ContainerMut<Node<K, V>>> Iterator for IntoValues<K, V, C> {
 impl<K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for IntoValues<K, V, C> {
 	fn next_back(&mut self) -> Option<V> {
 		self.inner.next_back().map(|(_, v)| v)
+	}
+}
+
+fn is_valid_range<T, R>(range: &R) -> bool where T: Ord + ?Sized, R: RangeBounds<T> {
+	match (range.start_bound(), range.end_bound()) {
+		(Bound::Included(start), Bound::Included(end)) => start <= end,
+		(Bound::Included(start), Bound::Excluded(end)) => start <= end,
+		(Bound::Included(_), Bound::Unbounded) => true,
+		(Bound::Excluded(start), Bound::Included(end)) => start <= end,
+		(Bound::Excluded(start), Bound::Excluded(end)) => start < end,
+		(Bound::Excluded(_), Bound::Unbounded) => true,
+		(Bound::Unbounded, _) => true
+	}
+}
+
+pub struct Range<'a, K, V, C> {
+	/// The tree reference.
+	btree: &'a BTreeMap<K, V, C>,
+
+	/// Address of the next item or last back address.
+	addr: ItemAddr,
+
+	end: ItemAddr
+}
+
+impl<'a, K, V, C: Container<Node<K, V>>> Range<'a, K, V, C> {
+	pub fn new<T, R>(btree: &'a BTreeMap<K, V, C>, range: R) -> Self where T: Ord + ?Sized, R: RangeBounds<T>, K: Borrow<T> {
+		if !is_valid_range(&range) {
+			panic!("Invalid range")
+		}
+
+		let addr = match range.start_bound() {
+			Bound::Included(start) => {
+				match btree.address_of(start) {
+					Ok(addr) => addr,
+					Err(addr) => addr
+				}
+			},
+			Bound::Excluded(start) => {
+				match btree.address_of(start) {
+					Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
+					Err(addr) => addr
+				}
+			},
+			Bound::Unbounded => btree.first_back_address()
+		};
+
+		let end = match range.end_bound() {
+			Bound::Included(end) => {
+				match btree.address_of(end) {
+					Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
+					Err(addr) => addr
+				}
+			},
+			Bound::Excluded(end) => {
+				match btree.address_of(end) {
+					Ok(addr) => addr,
+					Err(addr) => addr
+				}
+			},
+			Bound::Unbounded => btree.first_back_address()
+		};
+		
+		Range {
+			btree,
+			addr,
+			end
+		}
+	}
+}
+
+impl<'a, K, V, C: Container<Node<K, V>>> Iterator for Range<'a, K, V, C> {
+	type Item = (&'a K, &'a V);
+
+	fn next(&mut self) -> Option<(&'a K, &'a V)> {
+		if self.addr != self.end {
+			let item = self.btree.item(self.addr).unwrap();
+			self.addr = self.btree.next_item_or_back_address(self.addr).unwrap();
+			Some((item.key(), item.value()))
+		} else {
+			None
+		}
+	}
+}
+
+impl<'a, K, V, C: Container<Node<K, V>>> std::iter::FusedIterator for Range<'a, K, V, C> { }
+
+impl<'a, K, V, C: Container<Node<K, V>>> std::iter::DoubleEndedIterator for Range<'a, K, V, C> {
+	fn next_back(&mut self) -> Option<(&'a K, &'a V)> {
+		if self.addr != self.end {
+			let addr = self.btree.previous_item_address(self.addr).unwrap();
+			let item = self.btree.item(addr).unwrap();
+			self.end = addr;
+			Some((item.key(), item.value()))
+		} else {
+			None
+		}
+	}
+}
+
+pub struct RangeMut<'a, K, V, C> {
+	/// The tree reference.
+	btree: &'a mut BTreeMap<K, V, C>,
+
+	/// Address of the next item or last back address.
+	addr: ItemAddr,
+
+	end: ItemAddr
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> RangeMut<'a, K, V, C> {
+	pub fn new<T, R>(btree: &'a mut BTreeMap<K, V, C>, range: R) -> Self where T: Ord + ?Sized, R: RangeBounds<T>, K: Borrow<T> {
+		if !is_valid_range(&range) {
+			panic!("Invalid range")
+		}
+
+		let addr = match range.start_bound() {
+			Bound::Included(start) => {
+				match btree.address_of(start) {
+					Ok(addr) => addr,
+					Err(addr) => addr
+				}
+			},
+			Bound::Excluded(start) => {
+				match btree.address_of(start) {
+					Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
+					Err(addr) => addr
+				}
+			},
+			Bound::Unbounded => btree.first_back_address()
+		};
+
+		let end = match range.end_bound() {
+			Bound::Included(end) => {
+				match btree.address_of(end) {
+					Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
+					Err(addr) => addr
+				}
+			},
+			Bound::Excluded(end) => {
+				match btree.address_of(end) {
+					Ok(addr) => addr,
+					Err(addr) => addr
+				}
+			},
+			Bound::Unbounded => btree.first_back_address()
+		};
+		
+		RangeMut {
+			btree,
+			addr,
+			end
+		}
+	}
+
+	fn next_item(&mut self) -> Option<&'a mut Item<K, V>> {
+		if self.addr != self.end {
+			let addr = self.addr;
+			self.addr = self.btree.next_item_or_back_address(addr).unwrap();
+			let item = self.btree.item_mut(addr).unwrap();
+			Some(unsafe { std::mem::transmute(item) }) // this is safe because only one mutable reference to the same item can be emitted.
+		} else {
+			None
+		}
+	}
+
+	fn next_back_item(&mut self) -> Option<&'a mut Item<K, V>> {
+		if self.addr != self.end {
+			let addr = self.btree.previous_item_address(self.addr).unwrap();
+			let item = self.btree.item_mut(addr).unwrap();
+			self.end = addr;
+			Some(unsafe { std::mem::transmute(item) }) // this is safe because only one mutable reference to the same item can be emitted.s
+		} else {
+			None
+		}
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for RangeMut<'a, K, V, C> {
+	type Item = (&'a K, &'a mut V);
+
+	fn next(&mut self) -> Option<(&'a K, &'a mut V)> {
+		self.next_item().map(|item| {
+			let (key, value) = item.as_pair_mut();
+			(key as &'a K, value)
+		})
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::FusedIterator for RangeMut<'a, K, V, C> { }
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for RangeMut<'a, K, V, C> {
+	fn next_back(&mut self) -> Option<(&'a K, &'a mut V)> {
+		self.next_back_item().map(|item| {
+			let (key, value) = item.as_pair_mut();
+			(key as &'a K, value)
+		})
 	}
 }
