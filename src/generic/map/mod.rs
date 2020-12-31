@@ -649,6 +649,11 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 		IterMut::new(self)
 	}
 
+	#[inline]
+	pub fn bindings_mut(&mut self) -> BindingsMut<K, V, C> {
+		BindingsMut::new(self)
+	}
+
 	/// Gets a mutable iterator over the values of the map, in order by key.
 	///
 	/// # Example
@@ -1162,7 +1167,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> std::iter::DoubleEndedIterator for I
 }
 
 /// Iterator that can mutate the tree in place.
-pub struct ScanMut<'a, K, V, C> {
+pub struct BindingsMut<'a, K, V, C> {
 	/// The tree reference.
 	btree: &'a mut BTreeMap<K, V, C>,
 
@@ -1172,12 +1177,12 @@ pub struct ScanMut<'a, K, V, C> {
 	len: usize
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> ScanMut<'a, K, V, C> {
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> BindingsMut<'a, K, V, C> {
 	/// Create a new iterator over all the items of the map.
-	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> ScanMut<'a, K, V, C> {
+	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> BindingsMut<'a, K, V, C> {
 		let addr = btree.first_back_address();
 		let len = btree.len();
-		ScanMut {
+		BindingsMut {
 			btree,
 			addr,
 			len
@@ -1237,7 +1242,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> ScanMut<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for ScanMut<'a, K, V, C> {
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for BindingsMut<'a, K, V, C> {
 	type Item = (&'a K, &'a mut V);
 
 	fn size_hint(&self) -> (usize, Option<usize>) {
@@ -1424,7 +1429,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> IntoIterator for BTreeMap<K, V, C> {
 	}
 }
 
-pub struct DrainFilter<'a, K, V, C, F> where F: FnMut(&K, &mut V) -> bool {
+pub struct DrainFilter<'a, K, V, C: ContainerMut<Node<K, V>>, F> where F: FnMut(&K, &mut V) -> bool {
 	pred: F,
 
 	/// The tree reference.
@@ -1481,6 +1486,16 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>, F> Iterator for DrainFilter<'a, K, V
 		match self.next_item() {
 			Some(item) => Some(item.into_pair()),
 			None => None
+		}
+	}
+}
+
+impl<'a, K, V, C: ContainerMut<Node<K, V>>, F> Drop for DrainFilter<'a, K, V, C, F> where F: FnMut(&K, &mut V) -> bool {
+	fn drop(&mut self) {
+		loop {
+			if self.next().is_none() {
+				break
+			}
 		}
 	}
 }
