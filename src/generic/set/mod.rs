@@ -32,7 +32,23 @@ pub struct BTreeSet<T, C> {
 	map: BTreeMap<T, (), C>
 }
 
-impl<T, C: Container<Node<T, ()>>> BTreeSet<T, C> {
+impl<T, C> BTreeSet<T, C> {
+	/// Makes a new, empty `BTreeSet`.
+	///
+	/// # Example
+	///
+	/// ```
+	/// # #![allow(unused_mut)]
+	/// use local_btree::BTreeSet;
+	///
+	/// let mut set: BTreeSet<i32> = BTreeSet::new();
+	/// ```
+	pub fn new() -> Self where C: Default {
+		BTreeSet {
+			map: BTreeMap::new()
+		}
+	}
+
 	/// Returns the number of elements in the set.
 	///
 	/// # Example
@@ -64,6 +80,10 @@ impl<T, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	pub fn is_empty(&self) -> bool {
 		self.len() == 0
 	}
+}
+
+impl<T, C: Container<Node<T, ()>>> BTreeSet<T, C> {
+	// ...
 }
 
 impl<T, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
@@ -159,6 +179,28 @@ impl<T: Clone, C: Clone> Clone for BTreeSet<T, C> {
 
 	fn clone_from(&mut self, other: &Self) {
 		self.map.clone_from(&other.map);
+	}
+}
+
+impl<T: Ord, C: ContainerMut<Node<T, ()>> + Default> std::iter::FromIterator<T> for BTreeSet<T, C> {
+	fn from_iter<I>(iter: I) -> Self where I: IntoIterator<Item=T> {
+		let mut set = BTreeSet::new();
+		set.extend(iter);
+		set
+	}
+}
+
+impl<T: Ord, C: ContainerMut<Node<T, ()>>> Extend<T> for BTreeSet<T, C> {
+	fn extend<I>(&mut self, iter: I) where I: IntoIterator<Item=T> {
+		for t in iter {
+			self.insert(t);
+		}
+	}
+}
+
+impl<'a, T: Ord + Copy, C: ContainerMut<Node<T, ()>>> Extend<&'a T> for BTreeSet<T, C> {
+	fn extend<I>(&mut self, iter: I) where I: IntoIterator<Item=&'a T> {
+		self.extend(iter.into_iter().map(|&t| t))
 	}
 }
 
