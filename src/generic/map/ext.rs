@@ -200,7 +200,9 @@ pub trait BTreeExtMut<K, V> {
 
 	fn insert_exactly_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr;
 
-	fn replace_at(&mut self, addr: ItemAddr, value: V) -> V;
+	fn replace_at(&mut self, addr: ItemAddr, key: K, value: V) -> (K, V);
+
+	fn replace_value_at(&mut self, addr: ItemAddr, value: V) -> V;
 
 	fn remove_at(&mut self, addr: ItemAddr) -> Option<(Item<K, V>, ItemAddr)>;
 
@@ -693,7 +695,11 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 		}
 	}
 
-	fn replace_at(&mut self, addr: ItemAddr, value: V) -> V {
+	fn replace_at(&mut self, addr: ItemAddr, key: K, value: V) -> (K, V) {
+		self.node_mut(addr.id).item_mut(addr.offset).unwrap().set(key, value)
+	}
+
+	fn replace_value_at(&mut self, addr: ItemAddr, value: V) -> V {
 		self.node_mut(addr.id).item_mut(addr.offset).unwrap().set_value(value)
 	}
 

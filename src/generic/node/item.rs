@@ -59,6 +59,16 @@ impl<K, V> Item<K, V> {
 		unsafe { self.value.assume_init_mut() }
 	}
 
+	/// Modifying a key in such a way that its order with regard to other keys changes is a logical error.
+	#[inline]
+	pub fn set(&mut self, key: K, value: V) -> (K, V) {
+		let mut old_key = MaybeUninit::new(key);
+		let mut old_value = MaybeUninit::new(value);
+		std::mem::swap(&mut old_key, &mut self.key);
+		std::mem::swap(&mut old_value, &mut self.value);
+		unsafe { (old_key.assume_init(), old_value.assume_init()) }
+	}
+
 	#[inline]
 	pub fn set_value(&mut self, value: V) -> V {
 		let mut old_value = MaybeUninit::new(value);
