@@ -138,7 +138,7 @@ pub struct BTreeMap<K, V, C> {
 	v: PhantomData<V>
 }
 
-impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
+impl<K, V, C> BTreeMap<K, V, C> {
 	/// Create a new empty B-tree.
 	pub fn new() -> BTreeMap<K, V, C> where C: Default {
 		assert!(M >= 4);
@@ -160,7 +160,9 @@ impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
 	pub fn len(&self) -> usize {
 		self.len
 	}
+}
 
+impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Returns the key-value pair corresponding to the supplied key.
 	///
 	/// The supplied key may be any borrowed form of the map's key type, but the ordering
@@ -1012,6 +1014,39 @@ impl<K, L: PartialEq<K>, V, W: PartialEq<V>, C: Container<Node<K, V>>, D: Contai
 		} else {
 			false
 		}
+	}
+}
+
+impl<K, V, C: Default> Default for BTreeMap<K, V, C> {
+	fn default() -> Self {
+		BTreeMap::new()
+	}
+}
+
+impl<K: Ord, V, C: ContainerMut<Node<K, V>> + Default> std::iter::FromIterator<(K, V)> for BTreeMap<K, V, C> {
+	fn from_iter<T>(iter: T) -> BTreeMap<K, V, C> where T: IntoIterator<Item = (K, V)> {
+		let mut map = BTreeMap::new();
+
+		for (key, value) in iter {
+			map.insert(key, value);
+		}
+
+		map
+	}
+}
+
+impl<K: Ord, V, C: ContainerMut<Node<K, V>>> Extend<(K, V)> for BTreeMap<K, V, C> {
+	fn extend<T>(&mut self, iter: T) where T: IntoIterator<Item = (K, V)> {
+		for (key, value) in iter {
+			self.insert(key, value);
+		}
+	}
+}
+
+impl<'a, K: Ord + Copy, V: Copy, C: ContainerMut<Node<K, V>>> Extend<(&'a K, &'a V)> for BTreeMap<K, V, C> {
+	#[inline]
+	fn extend<T>(&mut self, iter: T) where T: IntoIterator<Item = (&'a K, &'a V)> {
+		self.extend(iter.into_iter().map(|(&key, &value)| (key, value)));
 	}
 }
 
