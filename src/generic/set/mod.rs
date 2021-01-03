@@ -52,6 +52,7 @@ impl<T, C> BTreeSet<T, C> {
 	///
 	/// let mut set: BTreeSet<i32> = BTreeSet::new();
 	/// ```
+	#[inline]
 	pub fn new() -> Self where C: Default {
 		BTreeSet {
 			map: BTreeMap::new()
@@ -70,6 +71,7 @@ impl<T, C> BTreeSet<T, C> {
 	/// v.insert(1);
 	/// assert_eq!(v.len(), 1);
 	/// ```
+	#[inline]
 	pub fn len(&self) -> usize {
 		self.map.len()
 	}
@@ -86,6 +88,7 @@ impl<T, C> BTreeSet<T, C> {
 	/// v.insert(1);
 	/// assert!(!v.is_empty());
 	/// ```
+	#[inline]
 	pub fn is_empty(&self) -> bool {
 		self.len() == 0
 	}
@@ -107,6 +110,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// assert_eq!(set.contains(&1), true);
 	/// assert_eq!(set.contains(&4), false);
 	/// ```
+	#[inline]
 	pub fn contains<Q: ?Sized>(&self, value: &Q) -> bool
 	where
 		T: Borrow<Q>,
@@ -130,6 +134,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// assert_eq!(set.get(&2), Some(&2));
 	/// assert_eq!(set.get(&4), None);
 	/// ```
+	#[inline]
 	pub fn get<Q: ?Sized>(&self, value: &Q) -> Option<&T>
 	where
 		T: Borrow<Q>,
@@ -168,6 +173,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// assert_eq!(set_iter.next(), Some(&3));
 	/// assert_eq!(set_iter.next(), None);
 	/// ```
+	#[inline]
 	pub fn iter(&self) -> Iter<T, C> {
 		Iter { inner: self.map.keys() }
 	}
@@ -194,6 +200,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// }
 	/// assert_eq!(Some(&5), set.range(4..).next());
 	/// ```
+	#[inline]
 	pub fn range<K: ?Sized, R>(&self, range: R) -> Range<T, C>
 	where
 		K: Ord,
@@ -221,6 +228,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// let union: Vec<_> = a.union(&b).cloned().collect();
 	/// assert_eq!(union, [1, 2]);
 	/// ```
+	#[inline]
 	pub fn union<'a, D: Container<Node<T, ()>>>(&'a self, other: &'a BTreeSet<T, D>) -> Union<'a, T, C, D> {
 		Union {
 			it1: self.iter().peekable(),
@@ -248,6 +256,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// let intersection: Vec<_> = a.intersection(&b).cloned().collect();
 	/// assert_eq!(intersection, [2]);
 	/// ```
+	#[inline]
 	pub fn intersection<'a, D: Container<Node<T, ()>>>(&'a self, other: &'a BTreeSet<T, D>) -> Intersection<'a, T, C, D> {
 		Intersection {
 			it1: self.iter(),
@@ -275,6 +284,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// let diff: Vec<_> = a.difference(&b).cloned().collect();
 	/// assert_eq!(diff, [1]);
 	/// ```
+	#[inline]
 	pub fn difference<'a, D: Container<Node<T, ()>>>(&'a self, other: &'a BTreeSet<T, D>) -> Difference<'a, T, C, D> {
 		Difference {
 			it1: self.iter(),
@@ -302,6 +312,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// let sym_diff: Vec<_> = a.symmetric_difference(&b).cloned().collect();
 	/// assert_eq!(sym_diff, [1, 3]);
 	/// ```
+	#[inline]
 	pub fn symmetric_difference<'a, D: Container<Node<T, ()>>>(&'a self, other: &'a BTreeSet<T, D>) -> SymmetricDifference<'a, T, C, D> {
 		SymmetricDifference {
 			it1: self.iter().peekable(),
@@ -326,6 +337,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// b.insert(1);
 	/// assert_eq!(a.is_disjoint(&b), false);
 	/// ```
+	#[inline]
 	pub fn is_disjoint<D: Container<Node<T, ()>>>(&self, other: &BTreeSet<T, D>) -> bool {
 		self.intersection(other).next().is_none()
 	}
@@ -347,6 +359,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// set.insert(4);
 	/// assert_eq!(set.is_subset(&sup), false);
 	/// ```
+	#[inline]
 	pub fn is_subset<D: Container<Node<T, ()>>>(&self, other: &BTreeSet<T, D>) -> bool {
 		self.difference(other).next().is_none()
 	}
@@ -371,6 +384,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// set.insert(2);
 	/// assert_eq!(set.is_superset(&sub), true);
 	/// ```
+	#[inline]
 	pub fn is_superset<D: Container<Node<T, ()>>>(&self, other: &BTreeSet<T, D>) -> bool {
 		other.is_subset(self)
 	}
@@ -390,6 +404,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// map.insert(2);
 	/// assert_eq!(map.first(), Some(&1));
 	/// ```
+	#[inline]
 	pub fn first(&self) -> Option<&T> {
 		self.map.first_key_value().map(|(k, _)| k)
 	}
@@ -409,6 +424,7 @@ impl<T: Ord, C: Container<Node<T, ()>>> BTreeSet<T, C> {
 	/// map.insert(2);
 	/// assert_eq!(map.last(), Some(&2));
 	/// ```
+	#[inline]
 	pub fn last(&self) -> Option<&T> {
 		self.map.last_key_value().map(|(k, _)| k)
 	}
@@ -427,6 +443,7 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
 	/// v.clear();
 	/// assert!(v.is_empty());
 	/// ```
+	#[inline]
 	pub fn clear(&mut self) {
 		self.map.clear()
 	}
@@ -451,6 +468,7 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
 	/// assert_eq!(set.insert(2), false);
 	/// assert_eq!(set.len(), 1);
 	/// ```
+	#[inline]
 	pub fn insert(&mut self, element: T) -> bool where T: Ord {
 		self.map.insert(element, ()).is_none()
 	}
@@ -473,6 +491,7 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
 	/// assert_eq!(set.remove(&2), true);
 	/// assert_eq!(set.remove(&2), false);
 	/// ```
+	#[inline]
 	pub fn remove<Q: ?Sized>(&mut self, value: &Q) -> bool where T: Borrow<Q>, Q: Ord {
 		self.map.remove(value).is_some()
 	}
@@ -492,6 +511,7 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
 	/// assert_eq!(set.take(&2), Some(2));
 	/// assert_eq!(set.take(&2), None);
 	/// ```
+	#[inline]
 	pub fn take<Q: ?Sized>(&mut self, value: &Q) -> Option<T> where T: Borrow<Q>, Q: Ord {
 		match self.map.take(value) {
 			Some((t, _)) => Some(t),
@@ -514,6 +534,7 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
 	/// set.replace(Vec::with_capacity(10));
 	/// assert_eq!(set.get(&[][..]).unwrap().capacity(), 10);
 	/// ```
+	#[inline]
 	pub fn replace(&mut self, value: T) -> Option<T> {
 		self.map.replace(value, ()).map(|(t, ())| t)
 	}
@@ -534,6 +555,7 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
 	/// }
 	/// assert!(set.is_empty());
 	/// ```
+	#[inline]
 	pub fn pop_first(&mut self) -> Option<T> {
 		self.map.pop_first().map(|kv| kv.0)
 	}
@@ -554,6 +576,7 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
 	/// }
 	/// assert!(set.is_empty());
 	/// ```
+	#[inline]
 	pub fn pop_last(&mut self) -> Option<T> {
 		self.map.pop_last().map(|kv| kv.0)
 	}
@@ -573,6 +596,7 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
 	/// set.retain(|&k| k % 2 == 0);
 	/// assert!(set.iter().eq([2, 4, 6].iter()));
 	/// ```
+	#[inline]
 	pub fn retain<F>(&mut self, mut f: F)
 	where
 		F: FnMut(&T) -> bool,
@@ -608,6 +632,7 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
 	/// assert!(a.contains(&4));
 	/// assert!(a.contains(&5));
 	/// ```
+	#[inline]
 	pub fn append(&mut self, other: &mut Self) where C: Default {
 		self.map.append(&mut other.map);
 	}
@@ -638,6 +663,7 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
 	/// assert_eq!(evens.into_iter().collect::<Vec<_>>(), vec![0, 2, 4, 6]);
 	/// assert_eq!(odds.into_iter().collect::<Vec<_>>(), vec![1, 3, 5, 7]);
 	/// ```
+	#[inline]
 	pub fn drain_filter<'a, F>(&'a mut self, pred: F) -> DrainFilter<'a, T, C, F>
 	where
 		F: 'a + FnMut(&T) -> bool,
@@ -647,16 +673,19 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> BTreeSet<T, C> {
 }
 
 impl<T: Clone, C: Clone> Clone for BTreeSet<T, C> {
+	#[inline]
 	fn clone(&self) -> Self {
 		BTreeSet { map: self.map.clone() }
 	}
 
+	#[inline]
 	fn clone_from(&mut self, other: &Self) {
 		self.map.clone_from(&other.map);
 	}
 }
 
 impl<T: Ord, C: ContainerMut<Node<T, ()>> + Default> FromIterator<T> for BTreeSet<T, C> {
+	#[inline]
 	fn from_iter<I>(iter: I) -> Self where I: IntoIterator<Item=T> {
 		let mut set = BTreeSet::new();
 		set.extend(iter);
@@ -668,6 +697,7 @@ impl<T, C: ContainerMut<Node<T, ()>>> IntoIterator for BTreeSet<T, C> {
 	type Item = T;
 	type IntoIter = IntoIter<T, C>;
 	
+	#[inline]
 	fn into_iter(self) -> IntoIter<T, C> {
 		IntoIter {
 			inner: self.map.into_keys()
@@ -676,6 +706,7 @@ impl<T, C: ContainerMut<Node<T, ()>>> IntoIterator for BTreeSet<T, C> {
 }
 
 impl<T: Ord, C: ContainerMut<Node<T, ()>>> Extend<T> for BTreeSet<T, C> {
+	#[inline]
 	fn extend<I>(&mut self, iter: I) where I: IntoIterator<Item=T> {
 		for t in iter {
 			self.insert(t);
@@ -684,12 +715,14 @@ impl<T: Ord, C: ContainerMut<Node<T, ()>>> Extend<T> for BTreeSet<T, C> {
 }
 
 impl<'a, T: Ord + Copy, C: ContainerMut<Node<T, ()>>> Extend<&'a T> for BTreeSet<T, C> {
+	#[inline]
 	fn extend<I>(&mut self, iter: I) where I: IntoIterator<Item=&'a T> {
 		self.extend(iter.into_iter().map(|&t| t))
 	}
 }
 
 impl<T, L: PartialEq<T>, C: Container<Node<T, ()>>, D: Container<Node<L, ()>>> PartialEq<BTreeSet<L, D>> for BTreeSet<T, C> {
+	#[inline]
 	fn eq(&self, other: &BTreeSet<L, D>) -> bool {
 		self.map.eq(&other.map)
 	}
@@ -698,18 +731,21 @@ impl<T, L: PartialEq<T>, C: Container<Node<T, ()>>, D: Container<Node<L, ()>>> P
 impl<T: Eq, C: Container<Node<T, ()>>> Eq for BTreeSet<T, C> {}
 
 impl<T, L: PartialOrd<T>, C: Container<Node<T, ()>>, D: Container<Node<L, ()>>> PartialOrd<BTreeSet<L, D>> for BTreeSet<T, C> {
+	#[inline]
 	fn partial_cmp(&self, other: &BTreeSet<L, D>) -> Option<Ordering> {
 		self.map.partial_cmp(&other.map)
 	}
 }
 
 impl<T: Ord, C: Container<Node<T, ()>>> Ord for BTreeSet<T, C> {
+	#[inline]
 	fn cmp(&self, other: &BTreeSet<T, C>) -> Ordering {
 		self.map.cmp(&other.map)
 	}
 }
 
 impl<T: Hash, C: Container<Node<T, ()>>> Hash for BTreeSet<T, C> {
+	#[inline]
 	fn hash<H: Hasher>(&self, h: &mut H) {
 		self.map.hash(h)
 	}
@@ -722,16 +758,19 @@ pub struct Iter<'a, T, C> {
 impl<'a, T, C: Container<Node<T, ()>>> Iterator for Iter<'a, T, C> {
 	type Item = &'a T;
 
+	#[inline]
 	fn size_hint(&self) -> (usize, Option<usize>) {
 		self.inner.size_hint()
 	}
 
+	#[inline]
 	fn next(&mut self) -> Option<&'a T> {
 		self.inner.next()
 	}
 }
 
 impl<'a, T, C: Container<Node<T, ()>>> DoubleEndedIterator for Iter<'a, T, C> {
+	#[inline]
 	fn next_back(&mut self) -> Option<&'a T> {
 		self.inner.next_back()
 	}
@@ -747,16 +786,19 @@ pub struct IntoIter<T, C> {
 impl<T, C: ContainerMut<Node<T, ()>>> Iterator for IntoIter<T, C> {
 	type Item = T;
 
+	#[inline]
 	fn size_hint(&self) -> (usize, Option<usize>) {
 		self.inner.size_hint()
 	}
 
+	#[inline]
 	fn next(&mut self) -> Option<T> {
 		self.inner.next()
 	}
 }
 
 impl<T, C: ContainerMut<Node<T, ()>>> DoubleEndedIterator for IntoIter<T, C> {
+	#[inline]
 	fn next_back(&mut self) -> Option<T> {
 		self.inner.next_back()
 	}
@@ -773,6 +815,7 @@ pub struct Union<'a, T, C: Container<Node<T, ()>>, D: Container<Node<T, ()>>> {
 impl<'a, T: Ord, C: Container<Node<T, ()>>, D: Container<Node<T, ()>>> Iterator for Union<'a, T, C, D> {
 	type Item = &'a T;
 
+	#[inline]
 	fn size_hint(&self) -> (usize, Option<usize>) {
 		let len1 = self.it1.len();
 		let len2 = self.it2.len();
@@ -780,6 +823,7 @@ impl<'a, T: Ord, C: Container<Node<T, ()>>, D: Container<Node<T, ()>>> Iterator 
 		(std::cmp::min(len1, len2), Some(std::cmp::max(len1, len2)))
 	}
 
+	#[inline]
 	fn next(&mut self) -> Option<&'a T> {
 		match (self.it1.peek(), self.it2.peek()) {
 			(Some(v1), Some(v2)) => {
@@ -809,6 +853,7 @@ pub struct Intersection<'a, T, C, D: Container<Node<T, ()>>> {
 impl<'a, T: Ord, C: Container<Node<T, ()>>, D: Container<Node<T, ()>>> Iterator for Intersection<'a, T, C, D> {
 	type Item = &'a T;
 
+	#[inline]
 	fn size_hint(&self) -> (usize, Option<usize>) {
 		let len1 = self.it1.len();
 		let len2 = self.it2.len();
@@ -816,6 +861,7 @@ impl<'a, T: Ord, C: Container<Node<T, ()>>, D: Container<Node<T, ()>>> Iterator 
 		(0, Some(std::cmp::min(len1, len2)))
 	}
 
+	#[inline]
 	fn next(&mut self) -> Option<&'a T> {
 		loop {
 			match self.it1.next() {
@@ -853,6 +899,7 @@ pub struct Difference<'a, T, C, D: Container<Node<T, ()>>> {
 impl<'a, T: Ord, C: Container<Node<T, ()>>, D: Container<Node<T, ()>>> Iterator for Difference<'a, T, C, D> {
 	type Item = &'a T;
 
+	#[inline]
 	fn size_hint(&self) -> (usize, Option<usize>) {
 		let len1 = self.it1.len();
 		let len2 = self.it2.len();
@@ -860,6 +907,7 @@ impl<'a, T: Ord, C: Container<Node<T, ()>>, D: Container<Node<T, ()>>> Iterator 
 		(len1.saturating_sub(len2), Some(self.it1.len()))
 	}
 
+	#[inline]
 	fn next(&mut self) -> Option<&'a T> {
 		loop {
 			match self.it1.next() {
@@ -897,6 +945,7 @@ pub struct SymmetricDifference<'a, T, C: Container<Node<T, ()>>, D: Container<No
 impl<'a, T: Ord, C: Container<Node<T, ()>>, D: Container<Node<T, ()>>> Iterator for SymmetricDifference<'a, T, C, D> {
 	type Item = &'a T;
 
+	#[inline]
 	fn size_hint(&self) -> (usize, Option<usize>) {
 		let len1 = self.it1.len();
 		let len2 = self.it2.len();
@@ -904,6 +953,7 @@ impl<'a, T: Ord, C: Container<Node<T, ()>>, D: Container<Node<T, ()>>> Iterator 
 		(0, len1.checked_add(len2))
 	}
 
+	#[inline]
 	fn next(&mut self) -> Option<&'a T> {
 		loop {
 			match (self.it1.peek(), self.it2.peek()) {
@@ -934,6 +984,7 @@ pub struct DrainFilter<'a, T, C: ContainerMut<Node<T, ()>>, F> where F: FnMut(&T
 }
 
 impl<'a, T: 'a, C: ContainerMut<Node<T, ()>>, F> DrainFilter<'a, T, C, F> where F: FnMut(&T) -> bool {
+	#[inline]
 	pub fn new(set: &'a mut BTreeSet<T, C>, pred: F) -> Self {
 		DrainFilter {
 			pred,
@@ -947,10 +998,12 @@ impl<'a, T, C: ContainerMut<Node<T, ()>>, F> FusedIterator for DrainFilter<'a, T
 impl<'a, T, C: ContainerMut<Node<T, ()>>, F> Iterator for DrainFilter<'a, T, C, F> where F: FnMut(&T) -> bool {
 	type Item = T;
 
+	#[inline]
 	fn size_hint(&self) -> (usize, Option<usize>) {
 		self.inner.size_hint()
 	}
 
+	#[inline]
 	fn next(&mut self) -> Option<T> {
 		let pred = &mut self.pred;
 		self.inner.next(&mut |t, _| (*pred)(t)).map(|(t, ())| t)
@@ -974,16 +1027,19 @@ pub struct Range<'a, T, C> {
 impl<'a, T, C: Container<Node<T, ()>>> Iterator for Range<'a, T, C> {
 	type Item = &'a T;
 
+	#[inline]
 	fn size_hint(&self) -> (usize, Option<usize>) {
 		self.inner.size_hint()
 	}
 	
+	#[inline]
 	fn next(&mut self) -> Option<&'a T> {
 		self.inner.next().map(|(k, ())| k)
 	}
 }
 
 impl<'a, T, C: Container<Node<T, ()>>> DoubleEndedIterator for Range<'a, T, C> {
+	#[inline]
 	fn next_back(&mut self) -> Option<&'a T> {
 		self.inner.next_back().map(|(k, ())| k)
 	}
