@@ -13,7 +13,7 @@ use crate::{
 			Node,
 			Balance,
 			Item,
-			ItemAddr,
+			Address,
 			Offset
 		}
 	},
@@ -21,11 +21,22 @@ use crate::{
 	ContainerMut
 };
 
-/// Extension methods.
+/// Extended API.
 ///
-/// This trait can be imported to access the internal methods of the B-Tree.
-/// These methods are not intended to be directly called by users, but can be used to
+/// This trait can be imported to access the internal functions of the B-Tree.
+/// These functions are not intended to be directly called by the users, but can be used to
 /// extends the data structure with new functionalities.
+/// 
+/// # Addressing
+/// 
+/// In this implementation of B-Trees, each node of a tree is addressed
+/// by the [`Address`] type.
+/// Each node is identified by a `usize`, and each item/entry in the node by an [`Offset`].
+/// This extended API allows the caller to explore, access and modify the
+/// internal structure of the tree using this addressing system.
+/// 
+/// Note that a valid address does not always refer to an actual item in the tree.
+/// See the [`Address`] type documentation for more details.
 pub trait BTreeExt<K, V> {
 	/// Get the root node id.
 	///
@@ -37,27 +48,37 @@ pub trait BTreeExt<K, V> {
 	/// Panics if `id` is out of bounds.
 	fn node(&self, id: usize) -> &Node<K, V>;
 
+	/// Get a reference to the value associated to the given `key` in the node `id`, if any.
 	fn get_in<Q: ?Sized>(&self, key: &Q, id: usize) -> Option<&V> where K: Borrow<Q>, Q: Ord;
 
-	fn item(&self, addr: ItemAddr) -> Option<&Item<K, V>>;
+	/// Get a reference to the item located at the given address.
+	fn item(&self, addr: Address) -> Option<&Item<K, V>>;
 
 	/// Get the first item address, if any.
 	/// 
 	/// Returns the first occupied valid address, or `None` if the tree is empty.
-	fn first_item_address(&self) -> Option<ItemAddr>;
+	fn first_item_address(&self) -> Option<Address>;
 
 	/// Get the first back address.
 	/// 
 	/// The returned address may not be occupied if the tree is empty.
-	fn first_back_address(&self) -> ItemAddr;
+	fn first_back_address(&self) -> Address;
 
-	fn last_item_address(&self) -> Option<ItemAddr>;
+	/// Get the last item address, if any.
+	/// 
+	/// Returns the last occupied valid address, or `None` if the tree is empty.
+	fn last_item_address(&self) -> Option<Address>;
 
-	fn last_valid_address(&self) -> ItemAddr;
+	/// Get the last valid address in the tree.
+	fn last_valid_address(&self) -> Address;
 
-	fn normalize(&self, addr: ItemAddr) -> Option<ItemAddr>;
+	/// Normalizes the given item address so that an out-of-node-bounds address points to the next item.
+	fn normalize(&self, addr: Address) -> Option<Address>;
 
-	fn leaf_address(&self, addr: ItemAddr) -> ItemAddr;
+	/// Returns the greatest valid leaf address that directly precedes the given address.
+	/// 
+	/// A "leaf address" is an address located in a leaf node.
+	fn leaf_address(&self, addr: Address) -> Address;
 
 	/// Get the previous item address.
 	/// 
@@ -81,7 +102,7 @@ pub trait BTreeExt<K, V> {
 	///       │  ╚═════╝     ╚══╪══╝          │  ╚═════╝     ╚══╪══╝          │  ╚═════╝  │
 	///       └─────────────────┘             └─────────────────┘             └───────────┘
 	/// ```
-	fn previous_item_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+	fn previous_item_address(&self, addr: Address) -> Option<Address>;
 
 	/// Get the previous front address.
 	/// 
@@ -108,7 +129,7 @@ pub trait BTreeExt<K, V> {
 	///          ╚══╪══╝     ╚═════╝  │          ╚══╪══╝     ╚═════╝  │          ╚══╪══╝     ╚══╪═╝
 	///             └─────────────────┘             └─────────────────┘             └───────────┘
 	/// ```
-	fn previous_front_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+	fn previous_front_address(&self, addr: Address) -> Option<Address>;
 
 	/// Get the next item address.
 	/// 
@@ -132,7 +153,7 @@ pub trait BTreeExt<K, V> {
 	///       │  ╚═════╝     ╚══╪══╝          │  ╚═════╝     ╚══╪══╝          │  ╚═════╝  │
 	///       └─────────────────┘             └─────────────────┘             └───────────┘
 	/// ```
-	fn next_item_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+	fn next_item_address(&self, addr: Address) -> Option<Address>;
 
 	/// Get the next back address.
 	/// 
@@ -159,14 +180,22 @@ pub trait BTreeExt<K, V> {
 	///       │  ╚═════╝     ╚══╪══╝          │  ╚═════╝     ╚══╪══╝          │  ╚═════╝  │
 	///       └─────────────────┘             └─────────────────┘             └───────────┘
 	/// ```
-	fn next_back_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+	fn next_back_address(&self, addr: Address) -> Option<Address>;
 
 	/// Get the next item address if any, or the next back address otherwise.
-	fn next_item_or_back_address(&self, addr: ItemAddr) -> Option<ItemAddr>;
+	fn next_item_or_back_address(&self, addr: Address) -> Option<Address>;
 
-	fn address_of<Q: ?Sized>(&self, key: &Q) -> Result<ItemAddr, ItemAddr> where K: Borrow<Q>, Q: Ord;
+	/// Get the address of the given key.
+	/// 
+	/// Returns `Ok(addr)` if the key is used in the tree.
+	/// If the key is not used in the tree then `Err(addr)` is returned,
+	/// where `addr` can be used to insert the missing key.
+	fn address_of<Q: ?Sized>(&self, key: &Q) -> Result<Address, Address> where K: Borrow<Q>, Q: Ord;
 
-	fn address_in<Q: ?Sized>(&self, id: usize, key: &Q) -> Result<ItemAddr, ItemAddr> where K: Borrow<Q>, Q: Ord;
+	/// Search for the address of the given key from the given node `id`.
+	/// 
+	/// Users should directly use [`address_of`].
+	fn address_in<Q: ?Sized>(&self, id: usize, key: &Q) -> Result<Address, Address> where K: Borrow<Q>, Q: Ord;
 
 	/// Validate the tree.
 	///
@@ -181,10 +210,22 @@ pub trait BTreeExt<K, V> {
 	fn validate_node(&self, id: usize, parent: Option<usize>, min: Option<&K>, max: Option<&K>) -> usize where K: Ord;
 }
 
+/// Extended mutable API.
+/// 
+/// This trait can be imported to access and modify the internal functions of the B-Tree.
+/// These functions are not intended to be directly called by the users, but can be used to
+/// extends the data structure with new functionalities.
+/// 
+/// # Correctness
+/// 
+/// The user of this trait is responsible to preserve the invariants of the data-structure.
+/// In particular, no item must be modified or inserted in a way that
+/// break the order between keys.
 pub trait BTreeExtMut<K, V> {
 	/// Set the new known number of items in the tree.
 	fn set_len(&mut self, len: usize);
 
+	/// Set the root node identifier.
 	fn set_root_id(&mut self, id: Option<usize>);
 
 	/// Get the node associated to the given `id` mutabily.
@@ -192,29 +233,61 @@ pub trait BTreeExtMut<K, V> {
 	/// Panics if `id` is out of bounds.
 	fn node_mut(&mut self, id: usize) -> &mut Node<K, V>;
 
+	/// Get a mutable reference to the value associated to the given `key` in the node `id`, if any.
 	fn get_mut_in(&mut self, key: &K, id: usize) -> Option<&mut V> where K: Ord;
 
-	fn item_mut(&mut self, addr: ItemAddr) -> Option<&mut Item<K, V>>;
+	/// Get a mutable reference to the item located at the given address.
+	fn item_mut(&mut self, addr: Address) -> Option<&mut Item<K, V>>;
 
-	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>) -> ItemAddr;
+	/// Insert an item at the given address.
+	/// 
+	/// The address is first converted into a leaf address using [`BTreeExt::leaf_address`]
+	/// and the item inserted using [`insert_exactly_at`].
+	fn insert_at(&mut self, addr: Address, item: Item<K, V>) -> Address;
 
-	fn insert_exactly_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr;
+	/// Insert an item at the given address.
+	/// 
+	/// If the address refers to an internal node,
+	/// `opt_right_id` defines the identifier of the child node inserted on the right of the inserted item.
+	/// 
+	/// Returns the address of the inserted item in the tree
+	/// (it may differ from the input address if the tree is rebalanced).
+	/// 
+	/// # Correctness
+	/// 
+	/// It is assumed that it is btree-correct to insert the given item at the given address.
+	/// 
+	/// # Panic
+	/// 
+	/// This function panics if the address refers to an internal node and `opt_right_id` is `None`.
+	fn insert_exactly_at(&mut self, addr: Address, item: Item<K, V>, opt_right_id: Option<usize>) -> Address;
 
-	fn replace_at(&mut self, addr: ItemAddr, key: K, value: V) -> (K, V);
+	/// Replaces the key-value binding at the given address.
+	fn replace_at(&mut self, addr: Address, key: K, value: V) -> (K, V);
 
-	fn replace_value_at(&mut self, addr: ItemAddr, value: V) -> V;
+	/// Replaces the value at the given address.
+	fn replace_value_at(&mut self, addr: Address, value: V) -> V;
 
-	fn remove_at(&mut self, addr: ItemAddr) -> Option<(Item<K, V>, ItemAddr)>;
+	/// Removes the item at the given address, if any.
+	/// 
+	/// If an item is removed then
+	/// this function returns a pair where the first hand side is the removed item,
+	/// and the right hand side is the updated address where the item can be reinserted at.
+	fn remove_at(&mut self, addr: Address) -> Option<(Item<K, V>, Address)>;
 
 	/// Rebalance a node, if necessary.
-	fn rebalance(&mut self, node_id: usize, addr: ItemAddr) -> ItemAddr;
+	fn rebalance(&mut self, node_id: usize, addr: Address) -> Address;
 
-	// /// Update a value in the given node `node_id`.
+	/// Update a value in the given node `node_id`.
 	fn update_in<T, F>(&mut self, id: usize, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T);
 
-	fn update_at<T, F>(&mut self, addr: ItemAddr, action: F) -> T where K: Ord, F: FnOnce(V) -> (Option<V>, T);
+	/// Update a valud at the given address.
+	fn update_at<T, F>(&mut self, addr: Address, action: F) -> T where K: Ord, F: FnOnce(V) -> (Option<V>, T);
 
 	/// Take the right-most leaf value in the given node.
+	///
+	/// Note that this does not change the registred length of the tree.
+	/// The returned item is expected to be reinserted in the tree.
 	fn remove_rightmost_leaf_of(&mut self, node_id: usize) -> (Item<K, V>, usize);
 
 	/// Allocate a free identifier for the given node.
@@ -247,68 +320,67 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		}
 	}
 
-	fn item(&self, addr: ItemAddr) -> Option<&Item<K, V>> {
+	fn item(&self, addr: Address) -> Option<&Item<K, V>> {
 		self.node(addr.id).item(addr.offset)
 	}
 
-	fn first_item_address(&self) -> Option<ItemAddr> {
+	fn first_item_address(&self) -> Option<Address> {
 		match self.root {
 			Some(mut id) => loop {
 				match self.node(id).child_id_opt(0) {
 					Some(child_id) => {
 						id = child_id
 					},
-					None => return Some(ItemAddr::new(id, 0.into()))
+					None => return Some(Address::new(id, 0.into()))
 				}
 			},
 			None => None
 		}
 	}
 
-	fn first_back_address(&self) -> ItemAddr {
+	fn first_back_address(&self) -> Address {
 		match self.root {
 			Some(mut id) => loop {
 				match self.node(id).child_id_opt(0) {
 					Some(child_id) => {
 						id = child_id
 					},
-					None => return ItemAddr::new(id, 0.into()) // TODO FIXME thechnically not the first
+					None => return Address::new(id, 0.into()) // TODO FIXME thechnically not the first
 				}
 			},
-			None => ItemAddr::nowhere()
+			None => Address::nowhere()
 		}
 	}
 
-	fn last_item_address(&self) -> Option<ItemAddr> {
+	fn last_item_address(&self) -> Option<Address> {
 		match self.root {
 			Some(mut id) => loop {
 				let node = self.node(id);
 				let index = node.item_count();
 				match node.child_id_opt(index) {
 					Some(child_id) => id = child_id,
-					None => return Some(ItemAddr::new(id, (index - 1).into()))
+					None => return Some(Address::new(id, (index - 1).into()))
 				}
 			},
 			None => None
 		}
 	}
 
-	fn last_valid_address(&self) -> ItemAddr {
+	fn last_valid_address(&self) -> Address {
 		match self.root {
 			Some(mut id) => loop {
 				let node = self.node(id);
 				let index = node.item_count();
 				match node.child_id_opt(index) {
 					Some(child_id) => id = child_id,
-					None => return ItemAddr::new(id, index.into())
+					None => return Address::new(id, index.into())
 				}
 			},
-			None => ItemAddr::nowhere()
+			None => Address::nowhere()
 		}
 	}
 
-	/// Normalizes the given item address so that an out-of-node-bounds address points to the next item.
-	fn normalize(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+	fn normalize(&self, mut addr: Address) -> Option<Address> {
 		if addr.is_nowhere() {
 			None
 		} else {
@@ -330,7 +402,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	}
 
 	#[inline]
-	fn leaf_address(&self, mut addr: ItemAddr) -> ItemAddr {
+	fn leaf_address(&self, mut addr: Address) -> Address {
 		if !addr.is_nowhere() {
 			loop {
 				let node = self.node(addr.id);
@@ -349,7 +421,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 
 	/// Get the address of the item located before this address.
 	#[inline]
-	fn previous_item_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+	fn previous_item_address(&self, mut addr: Address) -> Option<Address> {
 		if addr.is_nowhere() {
 			return None
 		}
@@ -383,7 +455,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	}
 
 	#[inline]
-	fn previous_front_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+	fn previous_front_address(&self, mut addr: Address) -> Option<Address> {
 		if addr.is_nowhere() {
 			return None
 		}
@@ -428,7 +500,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 
 	/// Get the address of the item located after this address if any.
 	#[inline]
-	fn next_item_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+	fn next_item_address(&self, mut addr: Address) -> Option<Address> {
 		if addr.is_nowhere() {
 			return None
 		}
@@ -475,7 +547,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	}
 
 	#[inline]
-	fn next_back_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+	fn next_back_address(&self, mut addr: Address) -> Option<Address> {
 		if addr.is_nowhere() {
 			return None
 		}
@@ -516,7 +588,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	}
 
 	#[inline]
-	fn next_item_or_back_address(&self, mut addr: ItemAddr) -> Option<ItemAddr> {
+	fn next_item_or_back_address(&self, mut addr: Address) -> Option<Address> {
 		if addr.is_nowhere() {
 			return None
 		}
@@ -561,21 +633,21 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 		}
 	}
 
-	fn address_of<Q: ?Sized>(&self, key: &Q) -> Result<ItemAddr, ItemAddr> where K: Borrow<Q>, Q: Ord {
+	fn address_of<Q: ?Sized>(&self, key: &Q) -> Result<Address, Address> where K: Borrow<Q>, Q: Ord {
 		match self.root {
 			Some(id) => self.address_in(id, key),
-			None => Err(ItemAddr::nowhere())
+			None => Err(Address::nowhere())
 		}
 	}
 
-	fn address_in<Q: ?Sized>(&self, mut id: usize, key: &Q) -> Result<ItemAddr, ItemAddr> where K: Borrow<Q>, Q: Ord {
+	fn address_in<Q: ?Sized>(&self, mut id: usize, key: &Q) -> Result<Address, Address> where K: Borrow<Q>, Q: Ord {
 		loop {
 			match self.node(id).offset_of(key) {
 				Ok(offset) => {
-					return Ok(ItemAddr { id, offset })
+					return Ok(Address { id, offset })
 				},
 				Err((offset, None)) => {
-					return Err(ItemAddr::new(id, offset.into()))
+					return Err(Address::new(id, offset.into()))
 				},
 				Err((_, Some(child_id))) => {
 					id = child_id;
@@ -658,28 +730,22 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 		}
 	}
 
-	fn item_mut(&mut self, addr: ItemAddr) -> Option<&mut Item<K, V>> {
+	fn item_mut(&mut self, addr: Address) -> Option<&mut Item<K, V>> {
 		self.node_mut(addr.id).item_mut(addr.offset)
 	}
 
-	fn insert_at(&mut self, addr: ItemAddr, item: Item<K, V>) -> ItemAddr {
+	fn insert_at(&mut self, addr: Address, item: Item<K, V>) -> Address {
 		self.insert_exactly_at(self.leaf_address(addr), item, None)
 	}
 
-	/// Insert an item at the given address.
-	/// Return the address of the inserted item in the tree
-	/// (it may differ from the input address if the tree is rebalanced).
-	///
-	/// ## Correctness
-	/// It is assumed that it is btree-correct to insert the given item at the given address.
-	fn insert_exactly_at(&mut self, addr: ItemAddr, item: Item<K, V>, opt_right_id: Option<usize>) -> ItemAddr {
+	fn insert_exactly_at(&mut self, addr: Address, item: Item<K, V>, opt_right_id: Option<usize>) -> Address {
 		if addr.is_nowhere() {
 			if self.is_empty() {
 				let new_root = Node::leaf(None, item);
 				let id = self.allocate_node(new_root);
 				self.root = Some(id);
 				self.len += 1;
-				ItemAddr { id, offset: 0.into() }
+				Address { id, offset: 0.into() }
 			} else {
 				panic!("invalid item address")
 			}
@@ -695,21 +761,16 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 		}
 	}
 
-	fn replace_at(&mut self, addr: ItemAddr, key: K, value: V) -> (K, V) {
+	fn replace_at(&mut self, addr: Address, key: K, value: V) -> (K, V) {
 		self.node_mut(addr.id).item_mut(addr.offset).unwrap().set(key, value)
 	}
 
-	fn replace_value_at(&mut self, addr: ItemAddr, value: V) -> V {
+	fn replace_value_at(&mut self, addr: Address, value: V) -> V {
 		self.node_mut(addr.id).item_mut(addr.offset).unwrap().set_value(value)
 	}
 
-	/// Remove the item at the given address.
-	/// Return the address of the next item.
-	/// All other addresses are to be considered invalid.
-	///
-	/// It is assumed that this item exists.
 	#[inline]
-	fn remove_at(&mut self, addr: ItemAddr) -> Option<(Item<K, V>, ItemAddr)> {
+	fn remove_at(&mut self, addr: Address) -> Option<(Item<K, V>, Address)> {
 		self.len -= 1;
 		match self.node_mut(addr.id).leaf_remove(addr.offset) {
 			Some(Ok(item)) => { // removed from a leaf.
@@ -741,7 +802,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 							std::mem::swap(&mut new_value, item.maybe_uninit_value_mut());
 						},
 						None => {
-							let (item, _) = self.remove_at(ItemAddr::new(id, offset)).unwrap();
+							let (item, _) = self.remove_at(Address::new(id, offset)).unwrap();
 							// item's value is NOT initialized here.
 							// It must not be dropped.
 							item.forget_value()
@@ -753,7 +814,8 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 				Err((offset, None)) => {
 					let (opt_new_value, result) = action(None);
 					if let Some(new_value) = opt_new_value {
-						self.insert_exactly_at(ItemAddr::new(id, offset.into()), Item::new(key, new_value), None);
+						let leaf_addr = Address::new(id, offset.into());
+						self.insert_exactly_at(leaf_addr, Item::new(key, new_value), None);
 					}
 
 					return result
@@ -765,7 +827,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 		}
 	}
 
-	fn update_at<T, F>(&mut self, addr: ItemAddr, action: F) -> T where K: Ord, F: FnOnce(V) -> (Option<V>, T) {
+	fn update_at<T, F>(&mut self, addr: Address, action: F) -> T where K: Ord, F: FnOnce(V) -> (Option<V>, T) {
 		unsafe {
 			let mut value = MaybeUninit::uninit();
 			let item = self.node_mut(addr.id).item_mut(addr.offset).unwrap();
@@ -788,9 +850,8 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 		}
 	}
 
-	/// Rebalance the given node.
 	#[inline]
-	fn rebalance(&mut self, mut id: usize, mut addr: ItemAddr) -> ItemAddr {
+	fn rebalance(&mut self, mut id: usize, mut addr: Address) -> Address {
 		let mut balance = self.node(id).balance();
 
 		loop {
@@ -812,9 +873,9 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 							// new address.
 							if addr.id == id {
 								if addr.offset == median_offset {
-									addr = ItemAddr { id: parent_id, offset }
+									addr = Address { id: parent_id, offset }
 								} else if addr.offset > median_offset {
-									addr = ItemAddr {
+									addr = Address {
 										id: right_id,
 										offset: (addr.offset.unwrap() - median_offset - 1).into()
 									}
@@ -840,9 +901,9 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 							// new address.
 							if addr.id == id {
 								if addr.offset == median_offset {
-									addr = ItemAddr { id: root_id, offset: 0.into() }
+									addr = Address { id: root_id, offset: 0.into() }
 								} else if addr.offset > median_offset {
-									addr = ItemAddr {
+									addr = Address {
 										id: right_id,
 										offset: (addr.offset.unwrap() - median_offset - 1).into()
 									}
@@ -889,7 +950,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 										}
 									},
 									None => {
-										addr = ItemAddr::nowhere()
+										addr = Address::nowhere()
 									}
 								}
 
@@ -906,10 +967,6 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 		addr
 	}
 
-	/// Take the right-most leaf value in the given node.
-	///
-	/// Note that this does not change the registred length of the tree.
-	/// The returned item is expected to be reinserted in the tree.
 	#[inline]
 	fn remove_rightmost_leaf_of(&mut self, mut id: usize) -> (Item<K, V>, usize) {
 		loop {
@@ -922,7 +979,6 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 		}
 	}
 
-	/// Allocate a free node.
 	#[inline]
 	fn allocate_node(&mut self, node: Node<K, V>) -> usize {
 		let mut children: StaticVec<usize, M> = StaticVec::new();
@@ -939,7 +995,6 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 		id
 	}
 
-	/// Release a node.
 	#[inline]
 	fn release_node(&mut self, id: usize) -> Node<K, V> {
 		self.nodes.remove(id)

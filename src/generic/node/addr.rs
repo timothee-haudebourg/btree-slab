@@ -1,7 +1,7 @@
 use std::fmt;
 use super::Offset;
 
-/// Item location in a BTreeMap.
+/// Item/entry location in a BTreeMap.
 ///
 /// Each item in a B-Tree is addressed by a node identifier and an offset in the node.
 /// We write `@id:offset` the address of the item contained in the node `id` at offset `offset`.
@@ -87,7 +87,7 @@ use super::Offset;
 /// It is not safe to use an address `addr` in which `addr.id` is not the identifier of any node
 /// currently used by the tree.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct ItemAddr {
+pub struct Address {
 	/// Identifier of the node.
 	pub id: usize,
 
@@ -95,35 +95,41 @@ pub struct ItemAddr {
 	pub offset: Offset
 }
 
-impl ItemAddr {
+impl Address {
+	/// Creates a new address from the identifier of the node and the offset in the node.
 	#[inline]
-	pub fn new(id: usize, offset: Offset) -> ItemAddr {
-		ItemAddr {
+	pub fn new(id: usize, offset: Offset) -> Address {
+		Address {
 			id, offset
 		}
 	}
 
+	/// Address in the empty tree.
+	/// 
+	/// This is the unique valid address address in an ampty tree.
+	/// It is only valid in the empty tree.
 	#[inline]
-	pub fn nowhere() -> ItemAddr {
-		ItemAddr {
+	pub fn nowhere() -> Address {
+		Address {
 			id: std::usize::MAX,
 			offset: 0.into()
 		}
 	}
 
+	/// Checks if the address is nowhere.
 	#[inline]
 	pub fn is_nowhere(&self) -> bool {
 		self.id == std::usize::MAX
 	}
 }
 
-impl fmt::Display for ItemAddr {
+impl fmt::Display for Address {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "@{}:{}", self.id, self.offset)
 	}
 }
 
-impl fmt::Debug for ItemAddr {
+impl fmt::Debug for Address {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "@{}:{}", self.id, self.offset)
 	}

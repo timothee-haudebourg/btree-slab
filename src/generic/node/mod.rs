@@ -10,16 +10,20 @@ mod leaf;
 pub mod internal;
 
 pub use item::Item;
-pub use addr::ItemAddr;
+pub use addr::Address;
 pub use leaf::Leaf as LeafNode;
 pub use internal::Internal as InternalNode;
 
+/// Type identifier by a key.
+/// 
+/// This is implemented by [`Item`] and [`internal::Branch`].
 pub(crate) trait Keyed {
 	type Key;
 
 	fn key(&self) -> &Self::Key;
 }
 
+/// Offset in a node.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Offset(usize);
 
@@ -139,13 +143,22 @@ impl fmt::Debug for Offset {
 	}
 }
 
+/// Node balance.
 #[derive(Debug)]
 pub enum Balance {
+	/// The node is balanced.
 	Balanced,
+
+	/// The node is overflowing.
 	Overflow,
-	Underflow(bool) // true if the node is empty.
+
+	/// The node is underflowing.
+	/// 
+	/// The boolean is `true` if the node is empty.
+	Underflow(bool)
 }
 
+/// Error returned when an operation on the node would result in an underflow.
 pub struct WouldUnderflow;
 
 /// B-tree node.

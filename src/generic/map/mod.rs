@@ -22,7 +22,7 @@ use crate::{
 	generic::{
 		node::{
 			Item,
-			ItemAddr,
+			Address,
 			Node,
 			Balance,
 			WouldUnderflow
@@ -51,6 +51,7 @@ pub const M: usize = 8;
 /// efficiently.
 ///
 /// # Basic usage
+/// 
 /// Basic usage is similar to the map data structures offered by the standard library.
 /// ```
 /// use local_btree::BTreeMap;
@@ -91,8 +92,11 @@ pub const M: usize = 8;
 ///     println!("{}: \"{}\"", movie, review);
 /// }
 /// ```
+/// 
+/// # Advanced usage
 ///
-/// # Entry API
+/// ## Entry API
+/// 
 /// This crate also reproduces the Entry API defined by the standard library,
 /// which allows for more complex methods of getting, setting, updating and removing keys and
 /// their values:
@@ -121,10 +125,52 @@ pub const M: usize = 8;
 /// *stat += random_stat_buff();
 /// ```
 ///
-/// # Inplace iterator modification
-/// Bar.
+/// ## Mutable iterators
+/// 
+/// This type provides two iterators providing mutable references to the entries:
+///   - [`IterMut`] is a double-ended iterator following the standard
+///     [`std::collection::map::IterMut`] implementation.
+///   - [`EntriesMut`] is a single-ended iterator that allows, in addition,
+///     insertion and deletion of entries at the current iterator's position in the map.
+///     An example is given below.
+/// 
+/// ```
+/// use local_btree::BTreeMap;
 ///
+/// let mut map = BTreeMap::new();
+/// map.insert("a", 1);
+/// map.insert("b", 2);
+/// map.insert("d", 4);
+///
+/// let mut entries = map.entries_mut();
+/// entries.next();
+/// entries.next();
+/// entries.insert("c", 3); // the inserted key must preserve the order of the map.
+/// 
+/// let entries: Vec<_> = map.into_iter().collect();
+/// assert_eq!(entries, vec![("a", 1), ("b", 2), ("c", 3), ("d", 4)]);
+/// ```
+///
+/// ## Custom allocation
+/// 
+/// This data structure is built on top of a slab data structure,
+/// but is agnostic of the actual slab implementation which is taken as parameter (`C`).
+/// If the `slab` feature is enabled,
+/// the [`slab::Slab`] implementation is used by default by reexporting
+/// `BTreeMap<K, V, slab::Slab<_>>` at the root of the crate.
+/// Any container implementing "slab-like" functionalities can be used.
+/// 
+/// ## Extended API
+/// 
+/// This crate provides the two traits [`BTreeExt`] and [`BTreeExtMut`] that can be imported to
+/// expose low-level operations on [`BTreeMap`].
+/// The extended API allows the caller to directly navigate and access the entries of the tree
+/// using their [`Address`].
+/// These functions are not intended to be directly called by the users,
+/// but can be used to extend the data structure with new functionalities.
+/// 
 /// # Correctness
+/// 
 /// It is a logic error for a key to be modified in such a way that the key's ordering relative
 /// to any other key, as determined by the [`Ord`] trait, changes while it is in the map.
 /// This is normally only possible through [`Cell`](`std::cell::Cell`),
@@ -157,11 +203,35 @@ impl<K, V, C> BTreeMap<K, V, C> {
 		}
 	}
 
+	/// Returns `true` if the map contains no elements.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut a = BTreeMap::new();
+	/// assert!(a.is_empty());
+	/// a.insert(1, "a");
+	/// assert!(!a.is_empty());
+	/// ```
 	#[inline]
 	pub fn is_empty(&self) -> bool {
 		self.root.is_none()
 	}
 
+	/// Returns the number of elements in the map.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut a = BTreeMap::new();
+	/// assert_eq!(a.len(), 0);
+	/// a.insert(1, "a");
+	/// assert_eq!(a.len(), 1);
+	/// ```
 	#[inline]
 	pub fn len(&self) -> usize {
 		self.len
@@ -270,6 +340,25 @@ impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
 		}
 	}
 
+	/// Gets an iterator over the entries of the map, sorted by key.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(3, "c");
+	/// map.insert(2, "b");
+	/// map.insert(1, "a");
+	///
+	/// for (key, value) in map.iter() {
+	///     println!("{}: {}", key, value);
+	/// }
+	///
+	/// let (first_key, first_value) = map.iter().next().unwrap();
+	/// assert_eq!((*first_key, *first_value), (1, "a"));
+	/// ```
 	#[inline]
 	pub fn iter(&self) -> Iter<K, V, C> {
 		Iter::new(self)
@@ -302,6 +391,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeMap<K, V, C> {
 	/// }
 	/// assert_eq!(Some((&5, &"b")), map.range(4..).next());
 	/// ```
+	#[inline]
 	pub fn range<T: ?Sized, R>(&self, range: R) -> Range<K, V, C>
 	where
 		T: Ord,
@@ -426,6 +516,23 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 		self.nodes.clear()
 	}
 
+	/// Returns a mutable reference to the value corresponding to the key.
+	///
+	/// The key may be any borrowed form of the map's key type, but the ordering
+	/// on the borrowed form *must* match the ordering on the key type.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(1, "a");
+	/// if let Some(x) = map.get_mut(&1) {
+	///     *x = "b";
+	/// }
+	/// assert_eq!(map[&1], "b");
+	/// ```
 	#[inline]
 	pub fn get_mut(&mut self, key: &K) -> Option<&mut V> where K: Ord {
 		match self.root {
@@ -706,14 +813,65 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 		}
 	}
 
+	/// Gets a mutable iterator over the entries of the map, sorted by key.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert("a", 1);
+	/// map.insert("b", 2);
+	/// map.insert("c", 3);
+	///
+	/// // add 10 to the value if the key isn't "a"
+	/// for (key, value) in map.iter_mut() {
+	///     if key != &"a" {
+	///         *value += 10;
+	///     }
+	/// }
+	/// ```
 	#[inline]
 	pub fn iter_mut(&mut self) -> IterMut<K, V, C> {
 		IterMut::new(self)
 	}
 
+	/// Gets a mutable iterator over the entries of the map, sorted by key, that allows insertion and deletion of the iterated entries.
+	/// 
+	/// # Correctness
+	/// 
+	/// It is safe to insert any key-value pair while iterating,
+	/// however this might break the well-formedness
+	/// of the underlying tree, which relies on several invariants.
+	/// To preserve these invariants,
+	/// the inserted key must be *strictly greater* than the previous visited item's key,
+	/// and *strictly less* than the next visited item
+	/// (which you can retrive through [`EntriesMut::peek`] without moving the iterator).
+	/// If this rule is not respected, the data structure will become unusable
+	/// (invalidate the specification of every method of the API).
+	///
+	/// # Example
+	///
+	/// ```
+	/// use local_btree::BTreeMap;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert("a", 1);
+	/// map.insert("b", 2);
+	/// map.insert("d", 4);
+	///
+	/// let mut entries = map.entries_mut();
+	/// entries.next();
+	/// entries.next();
+	/// entries.insert("c", 3);
+	/// 
+	/// let entries: Vec<_> = map.into_iter().collect();
+	/// assert_eq!(entries, vec![("a", 1), ("b", 2), ("c", 3), ("d", 4)]);
+	/// ```
 	#[inline]
-	pub fn bindings_mut(&mut self) -> BindingsMut<K, V, C> {
-		BindingsMut::new(self)
+	pub fn entries_mut(&mut self) -> EntriesMut<K, V, C> {
+		EntriesMut::new(self)
 	}
 
 	/// Constructs a mutable double-ended iterator over a sub-range of elements in the map.
@@ -929,7 +1087,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Returns true if the rotation succeeded, of false if the target child has no right sibling,
 	/// or if this sibling would underflow.
 	#[inline]
-	fn try_rotate_left(&mut self, id: usize, deficient_child_index: usize, addr: &mut ItemAddr) -> bool {
+	fn try_rotate_left(&mut self, id: usize, deficient_child_index: usize, addr: &mut Address) -> bool {
 		let pivot_offset = deficient_child_index.into();
 		let right_sibling_index = deficient_child_index + 1;
 		let (right_sibling_id, deficient_child_id) = {
@@ -981,7 +1139,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Returns true if the rotation succeeded, of false if the target child has no left sibling,
 	/// or if this sibling would underflow.
 	#[inline]
-	fn try_rotate_right(&mut self, id: usize, deficient_child_index: usize, addr: &mut ItemAddr) -> bool {
+	fn try_rotate_right(&mut self, id: usize, deficient_child_index: usize, addr: &mut Address) -> bool {
 		if deficient_child_index > 0 {
 			let left_sibling_index = deficient_child_index - 1;
 			let pivot_offset = left_sibling_index.into();
@@ -1027,7 +1185,7 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeMap<K, V, C> {
 
 	/// Merge the child `deficient_child_index` in node `id` with one of its direct sibling.
 	#[inline]
-	fn merge(&mut self, id: usize, deficient_child_index: usize, mut addr: ItemAddr) -> (Balance, ItemAddr) {
+	fn merge(&mut self, id: usize, deficient_child_index: usize, mut addr: Address) -> (Balance, Address) {
 		let (offset, left_id, right_id, separator, balance) = if deficient_child_index > 0 {
 			// merge with left sibling
 			self.node_mut(id).merge(deficient_child_index-1, deficient_child_index)
@@ -1204,15 +1362,15 @@ pub struct Iter<'a, K, V, C> {
 	btree: &'a BTreeMap<K, V, C>,
 
 	/// Address of the next item.
-	addr: Option<ItemAddr>,
+	addr: Option<Address>,
 
-	end: Option<ItemAddr>,
+	end: Option<Address>,
 
 	len: usize
 }
 
 impl<'a, K, V, C: Container<Node<K, V>>> Iter<'a, K, V, C> {
-	pub fn new(btree: &'a BTreeMap<K, V, C>) -> Self {
+	fn new(btree: &'a BTreeMap<K, V, C>) -> Self {
 		let addr = btree.first_item_address();
 		let len = btree.len();
 		Iter {
@@ -1285,15 +1443,15 @@ pub struct IterMut<'a, K, V, C> {
 	btree: &'a mut BTreeMap<K, V, C>,
 
 	/// Address of the next item.
-	addr: Option<ItemAddr>,
+	addr: Option<Address>,
 
-	end: Option<ItemAddr>,
+	end: Option<Address>,
 
 	len: usize
 }
 
 impl<'a, K, V, C: ContainerMut<Node<K, V>>> IterMut<'a, K, V, C> {
-	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> Self {
+	fn new(btree: &'a mut BTreeMap<K, V, C>) -> Self {
 		let addr = btree.first_item_address();
 		let len = btree.len();
 		IterMut {
@@ -1367,22 +1525,22 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> DoubleEndedIterator for IterMut<'a, 
 }
 
 /// Iterator that can mutate the tree in place.
-pub struct BindingsMut<'a, K, V, C> {
+pub struct EntriesMut<'a, K, V, C> {
 	/// The tree reference.
 	btree: &'a mut BTreeMap<K, V, C>,
 
 	/// Address of the next item, or last valid address.
-	addr: ItemAddr,
+	addr: Address,
 
 	len: usize
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> BindingsMut<'a, K, V, C> {
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> EntriesMut<'a, K, V, C> {
 	/// Create a new iterator over all the items of the map.
-	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> BindingsMut<'a, K, V, C> {
+	fn new(btree: &'a mut BTreeMap<K, V, C>) -> EntriesMut<'a, K, V, C> {
 		let addr = btree.first_back_address();
 		let len = btree.len();
-		BindingsMut {
+		EntriesMut {
 			btree,
 			addr,
 			len
@@ -1415,6 +1573,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> BindingsMut<'a, K, V, C> {
 	/// Insert a new item in the map before the next item.
 	///
 	/// ## Correctness
+	/// 
 	/// It is safe to insert any key-value pair here, however this might break the well-formedness
 	/// of the underlying tree, which relies on several invariants.
 	/// To preserve these invariants,
@@ -1442,7 +1601,7 @@ impl<'a, K, V, C: ContainerMut<Node<K, V>>> BindingsMut<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for BindingsMut<'a, K, V, C> {
+impl<'a, K, V, C: ContainerMut<Node<K, V>>> Iterator for EntriesMut<'a, K, V, C> {
 	type Item = (&'a K, &'a mut V);
 
 	fn size_hint(&self) -> (usize, Option<usize>) {
@@ -1471,10 +1630,10 @@ pub struct IntoIter<K, V, C> {
 	btree: BTreeMap<K, V, C>,
 
 	/// Address of the next item, or the last valid address.
-	addr: Option<ItemAddr>,
+	addr: Option<Address>,
 
 	/// Address following the last item.
-	end: Option<ItemAddr>,
+	end: Option<Address>,
 
 	/// Number of remaining items.
 	len: usize
@@ -1634,7 +1793,7 @@ pub(crate) struct DrainFilterInner<'a, K, V, C> {
 	btree: &'a mut BTreeMap<K, V, C>,
 
 	/// Address of the next item, or last valid address.
-	addr: ItemAddr,
+	addr: Address,
 
 	len: usize
 }
@@ -1688,7 +1847,7 @@ pub struct DrainFilter<'a, K, V, C: ContainerMut<Node<K, V>>, F> where F: FnMut(
 }
 
 impl<'a, K: 'a, V: 'a, C: ContainerMut<Node<K, V>>, F> DrainFilter<'a, K, V, C, F> where F: FnMut(&K, &mut V) -> bool {
-	pub fn new(btree: &'a mut BTreeMap<K, V, C>, pred: F) -> Self {
+	fn new(btree: &'a mut BTreeMap<K, V, C>, pred: F) -> Self {
 		DrainFilter {
 			pred,
 			inner: DrainFilterInner::new(btree)
@@ -1856,13 +2015,13 @@ pub struct Range<'a, K, V, C> {
 	btree: &'a BTreeMap<K, V, C>,
 
 	/// Address of the next item or last back address.
-	addr: ItemAddr,
+	addr: Address,
 
-	end: ItemAddr
+	end: Address
 }
 
 impl<'a, K, V, C: Container<Node<K, V>>> Range<'a, K, V, C> {
-	pub fn new<T, R>(btree: &'a BTreeMap<K, V, C>, range: R) -> Self where T: Ord + ?Sized, R: RangeBounds<T>, K: Borrow<T> {
+	fn new<T, R>(btree: &'a BTreeMap<K, V, C>, range: R) -> Self where T: Ord + ?Sized, R: RangeBounds<T>, K: Borrow<T> {
 		if !is_valid_range(&range) {
 			panic!("Invalid range")
 		}
@@ -1941,13 +2100,13 @@ pub struct RangeMut<'a, K, V, C> {
 	btree: &'a mut BTreeMap<K, V, C>,
 
 	/// Address of the next item or last back address.
-	addr: ItemAddr,
+	addr: Address,
 
-	end: ItemAddr
+	end: Address
 }
 
 impl<'a, K, V, C: ContainerMut<Node<K, V>>> RangeMut<'a, K, V, C> {
-	pub fn new<T, R>(btree: &'a mut BTreeMap<K, V, C>, range: R) -> Self where T: Ord + ?Sized, R: RangeBounds<T>, K: Borrow<T> {
+	fn new<T, R>(btree: &'a mut BTreeMap<K, V, C>, range: R) -> Self where T: Ord + ?Sized, R: RangeBounds<T>, K: Borrow<T> {
 		if !is_valid_range(&range) {
 			panic!("Invalid range")
 		}

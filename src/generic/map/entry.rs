@@ -10,7 +10,7 @@ use crate::{
 		node::{
 			Node,
 			Item,
-			ItemAddr
+			Address
 		}
 	},
 	Container,
@@ -30,7 +30,7 @@ use Entry::*;
 impl<'a, K, V, C: Container<Node<K, V>>> Entry<'a, K, V, C> {
 	/// Gets the address of the entry in the B-Tree.
 	#[inline]
-	pub fn address(&self) -> ItemAddr {
+	pub fn address(&self) -> Address {
 		match self {
 			Occupied(entry) => entry.address(),
 			Vacant(entry) => entry.address()
@@ -196,13 +196,13 @@ impl<'a, K: fmt::Debug, V: fmt::Debug, C: Container<Node<K, V>>> fmt::Debug for 
 pub struct VacantEntry<'a, K, V, C = Slab<Node<K, V>>> {
 	pub(crate) map: &'a mut BTreeMap<K, V, C>,
 	pub(crate) key: K,
-	pub(crate) addr: ItemAddr
+	pub(crate) addr: Address
 }
 
 impl<'a, K, V, C: Container<Node<K, V>>> VacantEntry<'a, K, V, C> {
 	/// Gets the address of the vacant entry in the B-Tree.
 	#[inline]
-	pub fn address(&self) -> ItemAddr {
+	pub fn address(&self) -> Address {
 		self.addr
 	}
 
@@ -273,13 +273,13 @@ impl<'a, K: fmt::Debug, V, C: Container<Node<K, V>>> fmt::Debug for VacantEntry<
 /// It is part of the [`Entry`] enum.
 pub struct OccupiedEntry<'a, K, V, C = Slab<Node<K, V>>> {
 	pub(crate) map: &'a mut BTreeMap<K, V, C>,
-	pub(crate) addr: ItemAddr
+	pub(crate) addr: Address
 }
 
 impl<'a, K, V, C: Container<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	/// Gets the address of the occupied entry in the B-Tree.
 	#[inline]
-	pub fn address(&self) -> ItemAddr {
+	pub fn address(&self) -> Address {
 		self.addr
 	}
 

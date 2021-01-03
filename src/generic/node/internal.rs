@@ -19,11 +19,20 @@ use crate::{
 	utils::binary_search_min
 };
 
+/// Underflow threshold.
+/// 
+/// An internal node is underflowing if it has less items than this constant.
 const UNDERFLOW: usize = M/2 - 1;
 
+/// Internal node branch.
+/// 
+/// A branch is an item followed by child node identifier.
 #[derive(Clone)]
 pub struct Branch<K, V> {
+	/// Item.
 	pub item: Item<K, V>,
+
+	/// Following child node identifier.
 	pub child: usize
 }
 
@@ -42,23 +51,6 @@ impl<K, V> Keyed for Branch<K, V> {
 	}
 }
 
-// impl<K, V, T: PartialEq<K>> PartialEq<T> for Branch<K, V> {
-// 	fn eq(&self, other: &T) -> bool {
-// 		other.eq(self.item.key())
-// 	}
-// }
-
-// impl<K, V, T: PartialOrd<K>> PartialOrd<T> for Branch<K, V> {
-// 	fn partial_cmp(&self, other: &T) -> Option<Ordering> {
-// 		match other.partial_cmp(self.item.key()) {
-// 			Some(Ordering::Greater) => Some(Ordering::Less),
-// 			Some(Ordering::Less) => Some(Ordering::Greater),
-// 			Some(Ordering::Equal) => Some(Ordering::Equal),
-// 			None => None
-// 		}
-// 	}
-// }
-
 impl<K: PartialEq, V> PartialEq for Branch<K, V> {
 	fn eq(&self, other: &Branch<K, V>) -> bool {
 		self.item.key().eq(other.item.key())
@@ -71,6 +63,9 @@ impl<K: Ord + PartialEq, V> PartialOrd for Branch<K, V> {
 	}
 }
 
+/// Internal node.
+/// 
+/// An internal node is a node where each item is surrounded by edges to child nodes.
 #[derive(Clone)]
 pub struct Internal<K, V> {
 	parent: usize,
@@ -79,6 +74,7 @@ pub struct Internal<K, V> {
 }
 
 impl<K, V> Internal<K, V> {
+	/// Creates a binary node (with a single item and two children).
 	#[inline]
 	pub fn binary(parent: Option<usize>, left_id: usize, median: Item<K, V>, right_id: usize) -> Internal<K, V> {
 		let mut other_children = StaticVec::new();
@@ -94,6 +90,7 @@ impl<K, V> Internal<K, V> {
 		}
 	}
 
+	/// Returns the current balance of the node.
 	#[inline]
 	pub fn balance(&self) -> Balance {
 		if self.is_overflowing() {
