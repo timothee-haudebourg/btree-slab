@@ -194,7 +194,7 @@ pub trait BTreeExt<K, V> {
 
 	/// Search for the address of the given key from the given node `id`.
 	/// 
-	/// Users should directly use [`address_of`].
+	/// Users should directly use [`BTreeExt::address_of`].
 	fn address_in<Q: ?Sized>(&self, id: usize, key: &Q) -> Result<Address, Address> where K: Borrow<Q>, Q: Ord;
 
 	/// Validate the tree.
@@ -242,7 +242,7 @@ pub trait BTreeExtMut<K, V> {
 	/// Insert an item at the given address.
 	/// 
 	/// The address is first converted into a leaf address using [`BTreeExt::leaf_address`]
-	/// and the item inserted using [`insert_exactly_at`].
+	/// and the item inserted using [`BTreeExtMut::insert_exactly_at`].
 	fn insert_at(&mut self, addr: Address, item: Item<K, V>) -> Address;
 
 	/// Insert an item at the given address.
