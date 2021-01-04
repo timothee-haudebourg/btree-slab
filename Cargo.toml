@@ -3,8 +3,14 @@ name = "local-btree"
 version = "0.1.0"
 authors = ["Timothée Haudebourg <author@haudebourg.net>"]
 edition = "2018"
+categories = ["data-structures"]
+keywords = ["btree", "map", "set", "local"]
+description = "A memory compact B-tree implementation"
+repository = "https://github.com/timothee-haudebourg/local-btree"
+documentation = "https://docs.rs/local-btree"
+license = "MIT/Apache-2.0"
+readme = "README.md"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 default = ["dot", "slab"]
 dot = []
