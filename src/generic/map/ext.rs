@@ -3,6 +3,10 @@ use std::{
 	borrow::Borrow
 };
 use staticvec::StaticVec;
+use cc_traits::{
+	Slab,
+	SlabMut
+};
 use crate::{
 	generic::{
 		map::{
@@ -16,9 +20,7 @@ use crate::{
 			Address,
 			Offset
 		}
-	},
-	Container,
-	ContainerMut
+	}
 };
 
 /// Extended API.
@@ -297,7 +299,7 @@ pub trait BTreeExtMut<K, V> {
 	fn release_node(&mut self, id: usize) -> Node<K, V>;
 }
 
-impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
+impl<K, V, C: Slab<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	#[inline]
 	fn root_id(&self) -> Option<usize> {
 		self.root
@@ -694,7 +696,7 @@ impl<K, V, C: Container<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	}
 }
 
-impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> {
+impl<K, V, C: SlabMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> {
 	#[inline]
 	fn set_len(&mut self, new_len: usize) {
 		self.len = new_len
@@ -997,6 +999,6 @@ impl<K, V, C: ContainerMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> 
 
 	#[inline]
 	fn release_node(&mut self, id: usize) -> Node<K, V> {
-		self.nodes.remove(id)
+		self.nodes.remove(id).unwrap()
 	}
 }
