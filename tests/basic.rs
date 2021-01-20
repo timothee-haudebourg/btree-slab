@@ -1,5 +1,4 @@
 #![feature(nll)]
-#![feature(min_const_generics)]
 use rand::{
 	SeedableRng,
 	seq::SliceRandom,
