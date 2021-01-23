@@ -2,7 +2,7 @@ use std::{
 	rc::Rc,
 	cell::Cell
 };
-use local_btree::BTreeMap;
+use btree_slab::BTreeMap;
 
 #[test]
 pub fn iter() {

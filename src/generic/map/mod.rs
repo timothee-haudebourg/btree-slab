@@ -56,7 +56,7 @@ pub const M: usize = 8;
 /// 
 /// Basic usage is similar to the map data structures offered by the standard library.
 /// ```
-/// use local_btree::BTreeMap;
+/// use btree_slab::BTreeMap;
 ///
 /// // type inference lets us omit an explicit type signature (which
 /// // would be `BTreeMap<&str, &str>` in this example).
@@ -103,7 +103,7 @@ pub const M: usize = 8;
 /// which allows for more complex methods of getting, setting, updating and removing keys and
 /// their values:
 /// ```
-/// use local_btree::BTreeMap;
+/// use btree_slab::BTreeMap;
 ///
 /// // type inference lets us omit an explicit type signature (which
 /// // would be `BTreeMap<&str, u8>` in this example).
@@ -137,7 +137,7 @@ pub const M: usize = 8;
 ///     An example is given below.
 /// 
 /// ```
-/// use local_btree::BTreeMap;
+/// use btree_slab::BTreeMap;
 ///
 /// let mut map = BTreeMap::new();
 /// map.insert("a", 1);
@@ -211,7 +211,7 @@ impl<K, V, C> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut a = BTreeMap::new();
 	/// assert!(a.is_empty());
@@ -228,7 +228,7 @@ impl<K, V, C> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut a = BTreeMap::new();
 	/// assert_eq!(a.len(), 0);
@@ -250,7 +250,7 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map: BTreeMap<i32, &str> = BTreeMap::new();
 	/// map.insert(1, "a");
@@ -273,7 +273,7 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Examples
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert(1, "a");
@@ -301,7 +301,7 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// assert_eq!(map.first_key_value(), None);
@@ -328,7 +328,7 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Basic usage:
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert(1, "b");
@@ -351,7 +351,7 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert(3, "c");
@@ -385,7 +385,7 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	/// use std::ops::Bound::Included;
 	///
 	/// let mut map = BTreeMap::new();
@@ -412,7 +412,7 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut a = BTreeMap::new();
 	/// a.insert(2, "b");
@@ -431,7 +431,7 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut a = BTreeMap::new();
 	/// a.insert(1, "hello");
@@ -452,7 +452,7 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	///
 	/// # Example
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map: BTreeMap<i32, &str> = BTreeMap::new();
 	/// map.insert(1, "a");
@@ -511,7 +511,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut a = BTreeMap::new();
 	/// a.insert(1, "a");
@@ -533,7 +533,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert(1, "a");
@@ -555,7 +555,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut letters = BTreeMap::new();
 	///
@@ -594,7 +594,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert(1, "a");
@@ -626,7 +626,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert(1, "a");
@@ -688,7 +688,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Draining elements in ascending order, while keeping a usable map each iteration.
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert(1, "a");
@@ -711,7 +711,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Draining elements in descending order, while keeping a usable map each iteration.
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert(1, "a");
@@ -735,7 +735,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert(1, "a");
@@ -764,7 +764,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Basic usage:
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert(1, "a");
@@ -830,7 +830,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert("a", 1);
@@ -866,7 +866,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map = BTreeMap::new();
 	/// map.insert("a", 1);
@@ -901,7 +901,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map: BTreeMap<&str, i32> = ["Alice", "Bob", "Carol", "Cheryl"]
 	///     .iter()
@@ -929,7 +929,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut a = BTreeMap::new();
 	/// a.insert(1, String::from("hello"));
@@ -969,7 +969,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Splitting a map into even and odd keys, reusing the original map:
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map: BTreeMap<i32, i32> = (0..8).map(|x| (x, x)).collect();
 	/// let evens: BTreeMap<_, _> = map.drain_filter(|k, _v| k % 2 == 0).collect();
@@ -989,7 +989,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map: BTreeMap<i32, i32> = (0..8).map(|x| (x, x*10)).collect();
 	/// // Keep only the elements with even-numbered keys.
@@ -1009,7 +1009,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut a = BTreeMap::new();
 	/// a.insert(1, "a");
@@ -1063,7 +1063,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut a = BTreeMap::new();
 	/// a.insert(2, "b");
@@ -1084,7 +1084,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// # Example
 	///
 	/// ```
-	/// use local_btree::BTreeMap;
+	/// use btree_slab::BTreeMap;
 	///
 	/// let mut a = BTreeMap::new();
 	/// a.insert(1, "hello");

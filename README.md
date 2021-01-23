@@ -1,4 +1,4 @@
-# Memory local B-Tree implementation
+# Slab-based B-Tree implementation
 
 <table><tr>
 	<td><a href="https://docs.rs/local-btree">Documentation</a></td>
@@ -6,13 +6,17 @@
 	<td><a href="https://github.com/timothee-haudebourg/local-btree">Repository</a></td>
 </tr></table>
 
-This crate provides an alternative implementation to the standard `BTreeMap` and `BTreeSet` data structures.
+This crate provides an alternative implementation to
+the standard `BTreeMap` and `BTreeSet` data structures
+based on a slab data-structure.
 In principle,
-the implementation is more flexible and more memory efficient.
-It is more flexible by providing an extended set of low-level operations on B-Trees through the `BTreeExt` trait which can be used
+this implementation is more flexible and more memory efficient.
+It is more flexible by providing an extended set of
+low-level operations on B-Trees through the `BTreeExt` trait which can be used
 to further extend the functionalities of the `BTreeMap` collection.
 In addition,
-the exact node allocation scheme is abstracted by a type parameter that can be instanciated by any data strucutre
+the underlying node allocation scheme is abstracted by a type parameter
+that can be instanciated by any data strucutre
 implementing slab-like operations.
 By default,
 the `Slab` type (from the `slab` crate) is used,
@@ -23,9 +27,10 @@ In theory, another type could be used to store the entire B-Tree on the stack.
 ## Usage
 
 From the user point of view,
-the collection provided by this crate can be used just like the standard `BTreeMap` and `BTreeSet` collections.
+the collection provided by this crate can be used just like
+the standard `BTreeMap` and `BTreeSet` collections.
 ```rust
-use local_btree::BTreeMap;
+use btree_slab::BTreeMap;
 
 // type inference lets us omit an explicit type signature (which
 // would be `BTreeMap<&str, &str>` in this example).
@@ -66,12 +71,12 @@ for (movie, review) in &movie_reviews {
 
 ### Custom node allocation
 
-One can use `local_btree::generic::BTreeMap` to
+One can use `btree_slab::generic::BTreeMap` to
 use a custom slab type to handle nodes allocation.
 
 ```rust
 use slab::Slab;
-use local_btree::generic::BTreeMap;
+use btree_slab::generic::BTreeMap;
 
 let mut map: BTreeMap<K, V, Slab<Node<K, V>>> = BTreeMap::new();
 ```
@@ -79,6 +84,16 @@ let mut map: BTreeMap<K, V, Slab<Node<K, V>>> = BTreeMap::new();
 In this example,
 the `Slab<Node<_, _>>` type is a slab-like data structure responsible for the nodes allocation.
 It must implement all the traits defining the `cc_traits::Slab` trait alias.
+
+## Extended API & Addressing
+
+In this implementation of B-Trees, each node of a tree is addressed
+by the `Address` type.
+The extended API, visible through the `BTreeExt` trait,
+allows the caller to explore, access and modify the
+internal structure of the tree using this addressing system.
+This can be used to further extend the functionalities of the `BTreeMap` collection,
+for example in the `range-map` crate.
 
 ## License
 
