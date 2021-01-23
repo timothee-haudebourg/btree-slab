@@ -1,6 +1,6 @@
 [package]
 name = "btree-slab"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Timothée Haudebourg <author@haudebourg.net>"]
 edition = "2018"
 categories = ["data-structures"]
@@ -18,7 +18,7 @@ std-slab = ["slab", "cc-traits/slab"]
 
 [dependencies]
 staticvec = "^0.10"
-cc-traits = { version = "^0.2.1", features = ["nightly"] }
+cc-traits = { version = "^0.3", features = ["nightly"] }
 slab = { version = "^0.4", optional = true }
 
 [dev-dependencies]
