@@ -18,7 +18,7 @@ std-slab = ["slab", "cc-traits/slab"]
 
 [dependencies]
 staticvec = "^0.10"
-cc-traits = { version = "^0.3", features = ["nightly"] }
+cc-traits = { path = "../../traits/cc-traits", features = ["nightly"] }
 slab = { version = "^0.4", optional = true }
 
 [dev-dependencies]
