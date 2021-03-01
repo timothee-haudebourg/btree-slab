@@ -1,9 +1,9 @@
 # Slab-based B-Tree implementation
 
 <table><tr>
-	<td><a href="https://docs.rs/local-btree">Documentation</a></td>
-	<td><a href="https://crates.io/crates/local-btree">Crate informations</a></td>
-	<td><a href="https://github.com/timothee-haudebourg/local-btree">Repository</a></td>
+	<td><a href="https://docs.rs/btree-slab">Documentation</a></td>
+	<td><a href="https://crates.io/crates/btree-slab">Crate informations</a></td>
+	<td><a href="https://github.com/timothee-haudebourg/btree-slab">Repository</a></td>
 </tr></table>
 
 This crate provides an alternative implementation to
