@@ -1,6 +1,6 @@
 [package]
 name = "btree-slab"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Timothée Haudebourg <author@haudebourg.net>"]
 edition = "2018"
 categories = ["data-structures"]
@@ -12,13 +12,13 @@ license = "MIT/Apache-2.0"
 readme = "README.md"
 
 [features]
-default = ["std-slab", "dot"]
+default = ["std-slab"]
 dot = []
 std-slab = ["slab", "cc-traits/slab"]
 
 [dependencies]
 staticvec = "^0.10"
-cc-traits = { path = "../../traits/cc-traits", features = ["nightly"] }
+cc-traits = { version = "^0.4", features = ["nightly"] }
 slab = { version = "^0.4", optional = true }
 
 [dev-dependencies]

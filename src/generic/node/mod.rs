@@ -17,7 +17,7 @@ pub use internal::Internal as InternalNode;
 /// Type identifier by a key.
 /// 
 /// This is implemented by [`Item`] and [`internal::Branch`].
-pub(crate) trait Keyed {
+pub trait Keyed {
 	type Key;
 
 	fn key(&self) -> &Self::Key;

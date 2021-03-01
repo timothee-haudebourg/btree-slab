@@ -4,7 +4,7 @@
 
 use slab::Slab;
 
-pub(crate) mod utils;
+pub mod utils;
 pub mod generic;
 
 /// B-Tree map based on `Slab`.
