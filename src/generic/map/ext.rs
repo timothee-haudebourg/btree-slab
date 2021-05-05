@@ -670,13 +670,15 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 
 	/// Validate the given node and returns the depth of the node.
 	#[cfg(debug_assertions)]
-	fn validate_node(&self, id: usize, parent: Option<usize>, min: Option<&K>, max: Option<&K>) -> usize where K: Ord {
+	fn validate_node(&self, id: usize, parent: Option<usize>, mut min: Option<&K>, mut max: Option<&K>) -> usize where K: Ord {
 		let node = self.node(id);
 		node.validate(parent, min, max);
 
 		let mut depth = None;
 		for (i, child_id) in node.children().enumerate() {
-			let (min, max) = node.separators(i);
+			let (child_min, child_max) = node.separators(i);
+			let min = child_min.or_else(|| min.take());
+			let max = child_max.or_else(|| max.take());
 
 			let child_depth = self.validate_node(child_id, Some(id), min, max);
 			match depth {

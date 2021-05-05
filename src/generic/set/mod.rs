@@ -96,6 +96,40 @@ impl<T, C> BTreeSet<T, C> {
 	}
 }
 
+impl<T, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
+	/// Gets an iterator that visits the values in the `BTreeSet` in ascending order.
+	///
+	/// # Examples
+	///
+	/// ```
+	/// use btree_slab::BTreeSet;
+	///
+	/// let set: BTreeSet<usize> = [1, 2, 3].iter().cloned().collect();
+	/// let mut set_iter = set.iter();
+	/// assert_eq!(set_iter.next(), Some(&1));
+	/// assert_eq!(set_iter.next(), Some(&2));
+	/// assert_eq!(set_iter.next(), Some(&3));
+	/// assert_eq!(set_iter.next(), None);
+	/// ```
+	///
+	/// Values returned by the iterator are returned in ascending order:
+	///
+	/// ```
+	/// use btree_slab::BTreeSet;
+	///
+	/// let set: BTreeSet<usize> = [3, 1, 2].iter().cloned().collect();
+	/// let mut set_iter = set.iter();
+	/// assert_eq!(set_iter.next(), Some(&1));
+	/// assert_eq!(set_iter.next(), Some(&2));
+	/// assert_eq!(set_iter.next(), Some(&3));
+	/// assert_eq!(set_iter.next(), None);
+	/// ```
+	#[inline]
+	pub fn iter(&self) -> Iter<T, C> {
+		Iter { inner: self.map.keys() }
+	}
+}
+
 impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
 	/// Returns `true` if the set contains a value.
 	///
@@ -146,38 +180,6 @@ impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
 			Some((t, ())) => Some(t),
 			None => None
 		}
-	}
-	
-	/// Gets an iterator that visits the values in the `BTreeSet` in ascending order.
-	///
-	/// # Examples
-	///
-	/// ```
-	/// use btree_slab::BTreeSet;
-	///
-	/// let set: BTreeSet<usize> = [1, 2, 3].iter().cloned().collect();
-	/// let mut set_iter = set.iter();
-	/// assert_eq!(set_iter.next(), Some(&1));
-	/// assert_eq!(set_iter.next(), Some(&2));
-	/// assert_eq!(set_iter.next(), Some(&3));
-	/// assert_eq!(set_iter.next(), None);
-	/// ```
-	///
-	/// Values returned by the iterator are returned in ascending order:
-	///
-	/// ```
-	/// use btree_slab::BTreeSet;
-	///
-	/// let set: BTreeSet<usize> = [3, 1, 2].iter().cloned().collect();
-	/// let mut set_iter = set.iter();
-	/// assert_eq!(set_iter.next(), Some(&1));
-	/// assert_eq!(set_iter.next(), Some(&2));
-	/// assert_eq!(set_iter.next(), Some(&3));
-	/// assert_eq!(set_iter.next(), None);
-	/// ```
-	#[inline]
-	pub fn iter(&self) -> Iter<T, C> {
-		Iter { inner: self.map.keys() }
 	}
 
 	/// Constructs a double-ended iterator over a sub-range of elements in the set.
@@ -704,6 +706,16 @@ impl<T, C: SlabMut<Node<T, ()>>> IntoIterator for BTreeSet<T, C> {
 		IntoIter {
 			inner: self.map.into_keys()
 		}
+	}
+}
+
+impl<'a, T, C: SlabMut<Node<T, ()>>> IntoIterator for &'a BTreeSet<T, C> {
+	type Item = &'a T;
+	type IntoIter = Iter<'a, T, C>;
+	
+	#[inline]
+	fn into_iter(self) -> Iter<'a, T, C> {
+		self.iter()
 	}
 }
 

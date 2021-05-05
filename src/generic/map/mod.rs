@@ -370,43 +370,6 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 		Iter::new(self)
 	}
 
-	/// Constructs a double-ended iterator over a sub-range of elements in the map.
-	/// The simplest way is to use the range syntax `min..max`, thus `range(min..max)` will
-	/// yield elements from min (inclusive) to max (exclusive).
-	/// The range may also be entered as `(Bound<T>, Bound<T>)`, so for example
-	/// `range((Excluded(4), Included(10)))` will yield a left-exclusive, right-inclusive
-	/// range from 4 to 10.
-	///
-	/// # Panics
-	///
-	/// Panics if range `start > end`.
-	/// Panics if range `start == end` and both bounds are `Excluded`.
-	///
-	/// # Example
-	///
-	/// ```
-	/// use btree_slab::BTreeMap;
-	/// use std::ops::Bound::Included;
-	///
-	/// let mut map = BTreeMap::new();
-	/// map.insert(3, "a");
-	/// map.insert(5, "b");
-	/// map.insert(8, "c");
-	/// for (&key, &value) in map.range((Included(&4), Included(&8))) {
-	///     println!("{}: {}", key, value);
-	/// }
-	/// assert_eq!(Some((&5, &"b")), map.range(4..).next());
-	/// ```
-	#[inline]
-	pub fn range<T: ?Sized, R>(&self, range: R) -> Range<K, V, C>
-	where
-		T: Ord,
-		K: Borrow<T>,
-		R: RangeBounds<T>,
-	{
-		Range::new(self, range)
-	}
-
 	/// Gets an iterator over the keys of the map, in sorted order.
 	///
 	/// # Example
@@ -443,6 +406,43 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	#[inline]
 	pub fn values(&self) -> Values<K, V, C> {
 		Values { inner: self.iter() }
+	}
+
+	/// Constructs a double-ended iterator over a sub-range of elements in the map.
+	/// The simplest way is to use the range syntax `min..max`, thus `range(min..max)` will
+	/// yield elements from min (inclusive) to max (exclusive).
+	/// The range may also be entered as `(Bound<T>, Bound<T>)`, so for example
+	/// `range((Excluded(4), Included(10)))` will yield a left-exclusive, right-inclusive
+	/// range from 4 to 10.
+	///
+	/// # Panics
+	///
+	/// Panics if range `start > end`.
+	/// Panics if range `start == end` and both bounds are `Excluded`.
+	///
+	/// # Example
+	///
+	/// ```
+	/// use btree_slab::BTreeMap;
+	/// use std::ops::Bound::Included;
+	///
+	/// let mut map = BTreeMap::new();
+	/// map.insert(3, "a");
+	/// map.insert(5, "b");
+	/// map.insert(8, "c");
+	/// for (&key, &value) in map.range((Included(&4), Included(&8))) {
+	///     println!("{}: {}", key, value);
+	/// }
+	/// assert_eq!(Some((&5, &"b")), map.range(4..).next());
+	/// ```
+	#[inline]
+	pub fn range<T: ?Sized, R>(&self, range: R) -> Range<K, V, C>
+	where
+		T: Ord,
+		K: Borrow<T>,
+		R: RangeBounds<T>,
+	{
+		Range::new(self, range)
 	}
 
 	/// Returns `true` if the map contains a value for the specified key.
