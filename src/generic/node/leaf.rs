@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use staticvec::StaticVec;
+use smallvec::SmallVec;
 use crate::{
 	generic::{
 		map::{
@@ -18,13 +18,13 @@ use crate::{
 #[derive(Clone)]
 pub struct Leaf<K, V> {
 	parent: usize,
-	items: StaticVec<Item<K, V>, {M+1}>
+	items: SmallVec<[Item<K, V>; M+1]>
 }
 
 impl<K, V> Leaf<K, V> {
 	#[inline]
 	pub fn new(parent: Option<usize>, item: Item<K, V>) -> Leaf<K, V> {
-		let mut items = StaticVec::new();
+		let mut items = SmallVec::new();
 		items.push(item);
 
 		Leaf {
@@ -148,7 +148,7 @@ impl<K, V> Leaf<K, V> {
 
 		let median_i = (self.items.len() - 1) / 2;
 
-		let right_items = self.items.drain(median_i+1..);
+		let right_items = self.items.drain(median_i+1..).collect();
 		let median = self.items.pop().unwrap();
 
 		let right_leaf = Leaf {

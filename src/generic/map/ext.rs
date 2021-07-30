@@ -2,7 +2,7 @@ use std::{
 	mem::MaybeUninit,
 	borrow::Borrow
 };
-use staticvec::StaticVec;
+use smallvec::SmallVec;
 use cc_traits::{
 	Slab,
 	SlabMut
@@ -985,7 +985,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> {
 
 	#[inline]
 	fn allocate_node(&mut self, node: Node<K, V>) -> usize {
-		let mut children: StaticVec<usize, M> = StaticVec::new();
+		let mut children: SmallVec<[usize; M]> = SmallVec::new();
 		let id = self.nodes.insert(node);
 
 		for child_id in self.node(id).children() {

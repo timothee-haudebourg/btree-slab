@@ -2,7 +2,7 @@ use std::{
 	borrow::Borrow,
 	cmp::Ordering
 };
-use staticvec::StaticVec;
+use smallvec::SmallVec;
 use crate::{
 	generic::{
 		map::M,
@@ -70,14 +70,14 @@ impl<K: Ord + PartialEq, V> PartialOrd for Branch<K, V> {
 pub struct Internal<K, V> {
 	parent: usize,
 	first_child: usize,
-	other_children: StaticVec<Branch<K, V>, M>
+	other_children: SmallVec<[Branch<K, V>; M]>
 }
 
 impl<K, V> Internal<K, V> {
 	/// Creates a binary node (with a single item and two children).
 	#[inline]
 	pub fn binary(parent: Option<usize>, left_id: usize, median: Item<K, V>, right_id: usize) -> Internal<K, V> {
-		let mut other_children = StaticVec::new();
+		let mut other_children = SmallVec::new();
 		other_children.push(Branch {
 			item: median,
 			child: right_id
@@ -340,7 +340,7 @@ impl<K, V> Internal<K, V> {
 		// Index of the median-key item in `other_children`.
 		let median_i = (self.other_children.len() - 1) / 2; // Since M is at least 3, `median_i` is at least 1.
 
-		let right_other_children = self.other_children.drain(median_i+1..);
+		let right_other_children = self.other_children.drain(median_i+1..).collect();
 		let median = self.other_children.pop().unwrap();
 
 		let right_node = Internal {

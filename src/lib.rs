@@ -1,5 +1,4 @@
 #![feature(is_sorted)]
-#![feature(maybe_uninit_ref)]
 #![feature(trait_alias)]
 
 use slab::Slab;
