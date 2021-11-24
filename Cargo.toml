@@ -7,7 +7,7 @@ categories = ["data-structures"]
 keywords = ["btree", "map", "set", "slab"]
 description = "A memory compact Slab-based B-tree implementation"
 repository = "https://github.com/timothee-haudebourg/btree-slab"
-documentation = "https://docs.rs/btree_slab/"
+documentation = "https://docs.rs/btree-slab"
 license = "MIT/Apache-2.0"
 readme = "README.md"
 
