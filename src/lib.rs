@@ -63,8 +63,10 @@
 //! 
 //! ```rust
 //! use slab::Slab;
-//! use btree_slab::generic::BTreeMap;
+//! use btree_slab::generic::{Node, BTreeMap};
 //! 
+//! # type K = u32;
+//! # type V = u32;
 //! let mut map: BTreeMap<K, V, Slab<Node<K, V>>> = BTreeMap::new();
 //! ```
 //! 
