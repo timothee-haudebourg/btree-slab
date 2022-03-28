@@ -84,8 +84,6 @@
 //! This can be used to further extend the functionalities of the `BTreeMap`
 //! collection, for example in the
 //! [`btree-range-map`](https://crates.io/crates/btree-range-map) crate.
-#![feature(is_sorted)]
-#![feature(trait_alias)]
 #![feature(generic_associated_types)]
 
 use slab::Slab;

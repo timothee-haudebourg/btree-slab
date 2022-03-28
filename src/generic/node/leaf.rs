@@ -290,7 +290,7 @@ impl<K, V> Leaf<K, V> {
 			}
 		}
 
-		if !self.items.is_sorted() {
+		if !self.items.windows(2).all(|w| w[0] < w[1]) {
 			panic!("leaf items are not sorted")
 		}
 

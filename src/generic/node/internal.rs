@@ -525,7 +525,7 @@ impl<K, V> Internal<K, V> {
 			panic!("root node is empty")
 		}
 
-		if !self.other_children.is_sorted() {
+		if !self.other_children.windows(2).all(|w| w[0] < w[1]) {
 			panic!("internal node items are not sorted")
 		}
 
