@@ -158,7 +158,7 @@ pub enum Balance {
 pub struct WouldUnderflow;
 
 /// Type of the value returned by `Node::pop_right`.
-/// 
+///
 /// It includes the offset of the popped item, the item itself and the index of
 /// the right child of the item if it is removed from an internal node.
 pub type PoppedItem<K, V> = (Offset, Item<K, V>, Option<usize>);

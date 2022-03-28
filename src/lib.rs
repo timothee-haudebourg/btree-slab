@@ -11,33 +11,33 @@
 //! that every node of the tree are allocated in a contiguous memory region,
 //! reducing the number of allocations needed.
 //! In theory, another type could be used to store the entire B-Tree on the stack.
-//! 
+//!
 //! ## Usage
-//! 
+//!
 //! From the user point of view, the collection provided by this crate can be
 //! used just like the standard `BTreeMap` and `BTreeSet` collections.
 //! ```
 //! use btree_slab::BTreeMap;
-//! 
+//!
 //! // type inference lets us omit an explicit type signature (which
 //! // would be `BTreeMap<&str, &str>` in this example).
 //! let mut movie_reviews = BTreeMap::new();
-//! 
+//!
 //! // review some movies.
 //! movie_reviews.insert("Office Space",       "Deals with real issues in the workplace.");
 //! movie_reviews.insert("Pulp Fiction",       "Masterpiece.");
 //! movie_reviews.insert("The Godfather",      "Very enjoyable.");
 //! movie_reviews.insert("The Blues Brothers", "Eye lyked it a lot.");
-//! 
+//!
 //! // check for a specific one.
 //! if !movie_reviews.contains_key("Les Misérables") {
 //!     println!("We've got {} reviews, but Les Misérables ain't one.",
 //!              movie_reviews.len());
 //! }
-//! 
+//!
 //! // oops, this review has a lot of spelling mistakes, let's delete it.
 //! movie_reviews.remove("The Blues Brothers");
-//! 
+//!
 //! // look up the values associated with some keys.
 //! let to_find = ["Up!", "Office Space"];
 //! for movie in &to_find {
@@ -46,36 +46,36 @@
 //!        None => println!("{} is unreviewed.", movie)
 //!     }
 //! }
-//! 
+//!
 //! // Look up the value for a key (will panic if the key is not found).
 //! println!("Movie review: {}", movie_reviews["Office Space"]);
-//! 
+//!
 //! // iterate over everything.
 //! for (movie, review) in &movie_reviews {
 //!     println!("{}: \"{}\"", movie, review);
 //! }
 //! ```
-//! 
+//!
 //! ### Custom node allocation
-//! 
+//!
 //! One can use `btree_slab::generic::BTreeMap` to
 //! use a custom slab type to handle nodes allocation.
-//! 
+//!
 //! ```rust
 //! use slab::Slab;
 //! use btree_slab::generic::{Node, BTreeMap};
-//! 
+//!
 //! # type K = u32;
 //! # type V = u32;
 //! let mut map: BTreeMap<K, V, Slab<Node<K, V>>> = BTreeMap::new();
 //! ```
-//! 
+//!
 //! In this example,
 //! the `Slab<Node<_, _>>` type is a slab-like data structure responsible for the nodes allocation.
 //! It must implement all the traits defining the `cc_traits::Slab` trait alias.
-//! 
+//!
 //! ## Extended API & Addressing
-//! 
+//!
 //! In this implementation of B-Trees, each node of a tree is addressed
 //! by the `Address` type.
 //! The extended API, visible through the `BTreeExt` trait,
@@ -86,6 +86,7 @@
 //! [`btree-range-map`](https://crates.io/crates/btree-range-map) crate.
 #![feature(is_sorted)]
 #![feature(trait_alias)]
+#![feature(generic_associated_types)]
 
 use slab::Slab;
 

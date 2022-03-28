@@ -232,7 +232,7 @@ pub trait BTreeExtMut<K, V> {
 	/// Set the root node identifier.
 	fn set_root_id(&mut self, id: Option<usize>);
 
-	/// Get the node associated to the given `id` mutabily.
+	/// Get the node associated to the given `id` mutably.
 	///
 	/// Panics if `id` is out of bounds.
 	fn node_mut(&mut self, id: usize) -> &mut Node<K, V>;
@@ -314,7 +314,10 @@ pub trait BTreeExtMut<K, V> {
 	fn release_node(&mut self, id: usize) -> Node<K, V>;
 }
 
-impl<K, V, C: Slab<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
+impl<K, V, C: Slab<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	#[inline]
 	fn root_id(&self) -> Option<usize> {
 		self.root
@@ -322,7 +325,7 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 
 	#[inline]
 	fn node(&self, id: usize) -> &Node<K, V> {
-		self.nodes.get(id).unwrap()
+		self.nodes.get(id).unwrap().into()
 	}
 
 	#[inline]
@@ -525,8 +528,8 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 			}
 			Some(std::cmp::Ordering::Greater) => {
 				return None;
-			},
-			_ => ()
+			}
+			_ => (),
 		}
 
 		// let original_addr_shifted = addr;
@@ -617,8 +620,8 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 			}
 			Some(std::cmp::Ordering::Greater) => {
 				return None;
-			},
-			_ => ()
+			}
+			_ => (),
 		}
 
 		let original_addr_shifted = addr;
@@ -727,7 +730,11 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C> {
 	}
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> {
+impl<K, V, C: SlabMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	#[inline]
 	fn set_len(&mut self, new_len: usize) {
 		self.len = new_len
@@ -740,7 +747,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> {
 
 	#[inline]
 	fn node_mut(&mut self, id: usize) -> &mut Node<K, V> {
-		self.nodes.get_mut(id).unwrap()
+		self.nodes.get_mut(id).unwrap().into()
 	}
 
 	#[inline]
@@ -935,10 +942,11 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> {
 									Some(std::cmp::Ordering::Greater) => {
 										addr = Address {
 											id: right_id,
-											offset: (addr.offset.unwrap() - median_offset - 1).into(),
+											offset: (addr.offset.unwrap() - median_offset - 1)
+												.into(),
 										}
 									}
-									_ => ()
+									_ => (),
 								}
 							} else if addr.id == parent_id && addr.offset >= offset {
 								addr.offset.incr()
@@ -968,10 +976,11 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C> {
 									Some(std::cmp::Ordering::Greater) => {
 										addr = Address {
 											id: right_id,
-											offset: (addr.offset.unwrap() - median_offset - 1).into(),
+											offset: (addr.offset.unwrap() - median_offset - 1)
+												.into(),
 										}
 									}
-									_ => ()
+									_ => (),
 								}
 							}
 

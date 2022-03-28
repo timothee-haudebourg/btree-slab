@@ -124,9 +124,9 @@ impl<K, V> Item<K, V> {
 	}
 
 	/// Drop the key but not the value which is assumed uninitialized.
-	/// 
+	///
 	/// # Safety
-	/// 
+	///
 	/// The value must be uninitialized.
 	#[inline]
 	pub unsafe fn forget_value(self) {

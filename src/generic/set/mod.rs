@@ -85,7 +85,10 @@ impl<T, C: Default> Default for BTreeSet<T, C> {
 	}
 }
 
-impl<T, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
+impl<T, C: Slab<Node<T, ()>>> BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	/// Gets an iterator that visits the values in the `BTreeSet` in ascending order.
 	///
 	/// # Examples
@@ -121,7 +124,10 @@ impl<T, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
 	}
 }
 
-impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
+impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	/// Returns `true` if the set contains a value.
 	///
 	/// The value may be any borrowed form of the set's value type,
@@ -229,7 +235,10 @@ impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
 	pub fn union<'a, D: Slab<Node<T, ()>>>(
 		&'a self,
 		other: &'a BTreeSet<T, D>,
-	) -> Union<'a, T, C, D> {
+	) -> Union<'a, T, C, D>
+	where
+		for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	{
 		Union {
 			it1: self.iter().peekable(),
 			it2: other.iter().peekable(),
@@ -260,7 +269,10 @@ impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
 	pub fn intersection<'a, D: Slab<Node<T, ()>>>(
 		&'a self,
 		other: &'a BTreeSet<T, D>,
-	) -> Intersection<'a, T, C, D> {
+	) -> Intersection<'a, T, C, D>
+	where
+		for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	{
 		Intersection {
 			it1: self.iter(),
 			it2: other.iter().peekable(),
@@ -291,7 +303,10 @@ impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
 	pub fn difference<'a, D: Slab<Node<T, ()>>>(
 		&'a self,
 		other: &'a BTreeSet<T, D>,
-	) -> Difference<'a, T, C, D> {
+	) -> Difference<'a, T, C, D>
+	where
+		for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	{
 		Difference {
 			it1: self.iter(),
 			it2: other.iter().peekable(),
@@ -322,7 +337,10 @@ impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
 	pub fn symmetric_difference<'a, D: Slab<Node<T, ()>>>(
 		&'a self,
 		other: &'a BTreeSet<T, D>,
-	) -> SymmetricDifference<'a, T, C, D> {
+	) -> SymmetricDifference<'a, T, C, D>
+	where
+		for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	{
 		SymmetricDifference {
 			it1: self.iter().peekable(),
 			it2: other.iter().peekable(),
@@ -347,7 +365,10 @@ impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
 	/// assert_eq!(a.is_disjoint(&b), false);
 	/// ```
 	#[inline]
-	pub fn is_disjoint<D: Slab<Node<T, ()>>>(&self, other: &BTreeSet<T, D>) -> bool {
+	pub fn is_disjoint<D: Slab<Node<T, ()>>>(&self, other: &BTreeSet<T, D>) -> bool
+	where
+		for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	{
 		self.intersection(other).next().is_none()
 	}
 
@@ -369,7 +390,10 @@ impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
 	/// assert_eq!(set.is_subset(&sup), false);
 	/// ```
 	#[inline]
-	pub fn is_subset<D: Slab<Node<T, ()>>>(&self, other: &BTreeSet<T, D>) -> bool {
+	pub fn is_subset<D: Slab<Node<T, ()>>>(&self, other: &BTreeSet<T, D>) -> bool
+	where
+		for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	{
 		self.difference(other).next().is_none()
 	}
 
@@ -394,7 +418,10 @@ impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
 	/// assert_eq!(set.is_superset(&sub), true);
 	/// ```
 	#[inline]
-	pub fn is_superset<D: Slab<Node<T, ()>>>(&self, other: &BTreeSet<T, D>) -> bool {
+	pub fn is_superset<D: Slab<Node<T, ()>>>(&self, other: &BTreeSet<T, D>) -> bool
+	where
+		for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	{
 		other.is_subset(self)
 	}
 
@@ -439,7 +466,11 @@ impl<T: Ord, C: Slab<Node<T, ()>>> BTreeSet<T, C> {
 	}
 }
 
-impl<T: Ord, C: SlabMut<Node<T, ()>>> BTreeSet<T, C> {
+impl<T: Ord, C: SlabMut<Node<T, ()>>> BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
+{
 	/// Clears the set, removing all values.
 	///
 	/// # Examples
@@ -709,7 +740,11 @@ impl<T: Clone, C: Clone> Clone for BTreeSet<T, C> {
 	}
 }
 
-impl<T: Ord, C: SlabMut<Node<T, ()>> + Default> FromIterator<T> for BTreeSet<T, C> {
+impl<T: Ord, C: SlabMut<Node<T, ()>> + Default> FromIterator<T> for BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
+{
 	#[inline]
 	fn from_iter<I>(iter: I) -> Self
 	where
@@ -721,7 +756,11 @@ impl<T: Ord, C: SlabMut<Node<T, ()>> + Default> FromIterator<T> for BTreeSet<T, 
 	}
 }
 
-impl<T, C: SlabMut<Node<T, ()>>> IntoIterator for BTreeSet<T, C> {
+impl<T, C: SlabMut<Node<T, ()>>> IntoIterator for BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
+{
 	type Item = T;
 	type IntoIter = IntoIter<T, C>;
 
@@ -733,7 +772,10 @@ impl<T, C: SlabMut<Node<T, ()>>> IntoIterator for BTreeSet<T, C> {
 	}
 }
 
-impl<'a, T, C: SlabMut<Node<T, ()>>> IntoIterator for &'a BTreeSet<T, C> {
+impl<'a, T, C: SlabMut<Node<T, ()>>> IntoIterator for &'a BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	type Item = &'a T;
 	type IntoIter = Iter<'a, T, C>;
 
@@ -743,7 +785,11 @@ impl<'a, T, C: SlabMut<Node<T, ()>>> IntoIterator for &'a BTreeSet<T, C> {
 	}
 }
 
-impl<T: Ord, C: SlabMut<Node<T, ()>>> Extend<T> for BTreeSet<T, C> {
+impl<T: Ord, C: SlabMut<Node<T, ()>>> Extend<T> for BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
+{
 	#[inline]
 	fn extend<I>(&mut self, iter: I)
 	where
@@ -755,7 +801,11 @@ impl<T: Ord, C: SlabMut<Node<T, ()>>> Extend<T> for BTreeSet<T, C> {
 	}
 }
 
-impl<'a, T: 'a + Ord + Copy, C: SlabMut<Node<T, ()>>> Extend<&'a T> for BTreeSet<T, C> {
+impl<'a, T: 'a + Ord + Copy, C: SlabMut<Node<T, ()>>> Extend<&'a T> for BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
+{
 	#[inline]
 	fn extend<I>(&mut self, iter: I)
 	where
@@ -767,6 +817,9 @@ impl<'a, T: 'a + Ord + Copy, C: SlabMut<Node<T, ()>>> Extend<&'a T> for BTreeSet
 
 impl<T, L: PartialEq<T>, C: Slab<Node<T, ()>>, D: Slab<Node<L, ()>>> PartialEq<BTreeSet<L, D>>
 	for BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<L, ()>>,
 {
 	#[inline]
 	fn eq(&self, other: &BTreeSet<L, D>) -> bool {
@@ -774,10 +827,16 @@ impl<T, L: PartialEq<T>, C: Slab<Node<T, ()>>, D: Slab<Node<L, ()>>> PartialEq<B
 	}
 }
 
-impl<T: Eq, C: Slab<Node<T, ()>>> Eq for BTreeSet<T, C> {}
+impl<T: Eq, C: Slab<Node<T, ()>>> Eq for BTreeSet<T, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>
+{
+}
 
 impl<T, L: PartialOrd<T>, C: Slab<Node<T, ()>>, D: Slab<Node<L, ()>>> PartialOrd<BTreeSet<L, D>>
 	for BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<L, ()>>,
 {
 	#[inline]
 	fn partial_cmp(&self, other: &BTreeSet<L, D>) -> Option<Ordering> {
@@ -785,14 +844,20 @@ impl<T, L: PartialOrd<T>, C: Slab<Node<T, ()>>, D: Slab<Node<L, ()>>> PartialOrd
 	}
 }
 
-impl<T: Ord, C: Slab<Node<T, ()>>> Ord for BTreeSet<T, C> {
+impl<T: Ord, C: Slab<Node<T, ()>>> Ord for BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	#[inline]
 	fn cmp(&self, other: &BTreeSet<T, C>) -> Ordering {
 		self.map.cmp(&other.map)
 	}
 }
 
-impl<T: Hash, C: Slab<Node<T, ()>>> Hash for BTreeSet<T, C> {
+impl<T: Hash, C: Slab<Node<T, ()>>> Hash for BTreeSet<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	#[inline]
 	fn hash<H: Hasher>(&self, h: &mut H) {
 		self.map.hash(h)
@@ -803,7 +868,10 @@ pub struct Iter<'a, T, C> {
 	inner: map::Keys<'a, T, (), C>,
 }
 
-impl<'a, T, C: Slab<Node<T, ()>>> Iterator for Iter<'a, T, C> {
+impl<'a, T, C: Slab<Node<T, ()>>> Iterator for Iter<'a, T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	type Item = &'a T;
 
 	#[inline]
@@ -817,21 +885,34 @@ impl<'a, T, C: Slab<Node<T, ()>>> Iterator for Iter<'a, T, C> {
 	}
 }
 
-impl<'a, T, C: Slab<Node<T, ()>>> DoubleEndedIterator for Iter<'a, T, C> {
+impl<'a, T, C: Slab<Node<T, ()>>> DoubleEndedIterator for Iter<'a, T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	#[inline]
 	fn next_back(&mut self) -> Option<&'a T> {
 		self.inner.next_back()
 	}
 }
 
-impl<'a, T, C: Slab<Node<T, ()>>> FusedIterator for Iter<'a, T, C> {}
-impl<'a, T, C: Slab<Node<T, ()>>> ExactSizeIterator for Iter<'a, T, C> {}
+impl<'a, T, C: Slab<Node<T, ()>>> FusedIterator for Iter<'a, T, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>
+{
+}
+impl<'a, T, C: Slab<Node<T, ()>>> ExactSizeIterator for Iter<'a, T, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>
+{
+}
 
 pub struct IntoIter<T, C> {
 	inner: map::IntoKeys<T, (), C>,
 }
 
-impl<T, C: SlabMut<Node<T, ()>>> Iterator for IntoIter<T, C> {
+impl<T, C: SlabMut<Node<T, ()>>> Iterator for IntoIter<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
+{
 	type Item = T;
 
 	#[inline]
@@ -845,22 +926,44 @@ impl<T, C: SlabMut<Node<T, ()>>> Iterator for IntoIter<T, C> {
 	}
 }
 
-impl<T, C: SlabMut<Node<T, ()>>> DoubleEndedIterator for IntoIter<T, C> {
+impl<T, C: SlabMut<Node<T, ()>>> DoubleEndedIterator for IntoIter<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
+{
 	#[inline]
 	fn next_back(&mut self) -> Option<T> {
 		self.inner.next_back()
 	}
 }
 
-impl<T, C: SlabMut<Node<T, ()>>> FusedIterator for IntoIter<T, C> {}
-impl<T, C: SlabMut<Node<T, ()>>> ExactSizeIterator for IntoIter<T, C> {}
+impl<T, C: SlabMut<Node<T, ()>>> FusedIterator for IntoIter<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
+{
+}
+impl<T, C: SlabMut<Node<T, ()>>> ExactSizeIterator for IntoIter<T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
+{
+}
 
-pub struct Union<'a, T, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> {
+pub struct Union<'a, T, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	it1: Peekable<Iter<'a, T, C>>,
 	it2: Peekable<Iter<'a, T, D>>,
 }
 
-impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> Iterator for Union<'a, T, C, D> {
+impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> Iterator for Union<'a, T, C, D>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	type Item = &'a T;
 
 	#[inline]
@@ -889,15 +992,25 @@ impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> Iterator for Union<
 	}
 }
 
-impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> FusedIterator for Union<'a, T, C, D> {}
+impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> FusedIterator for Union<'a, T, C, D>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
+}
 
-pub struct Intersection<'a, T, C, D: Slab<Node<T, ()>>> {
+pub struct Intersection<'a, T, C, D: Slab<Node<T, ()>>>
+where
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	it1: Iter<'a, T, C>,
 	it2: Peekable<Iter<'a, T, D>>,
 }
 
-impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> Iterator
-	for Intersection<'a, T, C, D>
+impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> Iterator for Intersection<'a, T, C, D>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
 {
 	type Item = &'a T;
 
@@ -939,15 +1052,25 @@ impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> Iterator
 
 impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> FusedIterator
 	for Intersection<'a, T, C, D>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
 {
 }
 
-pub struct Difference<'a, T, C, D: Slab<Node<T, ()>>> {
+pub struct Difference<'a, T, C, D: Slab<Node<T, ()>>>
+where
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	it1: Iter<'a, T, C>,
 	it2: Peekable<Iter<'a, T, D>>,
 }
 
-impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> Iterator for Difference<'a, T, C, D> {
+impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> Iterator for Difference<'a, T, C, D>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	type Item = &'a T;
 
 	#[inline]
@@ -988,16 +1111,26 @@ impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> Iterator for Differ
 
 impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> FusedIterator
 	for Difference<'a, T, C, D>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
 {
 }
 
-pub struct SymmetricDifference<'a, T, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> {
+pub struct SymmetricDifference<'a, T, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	it1: Peekable<Iter<'a, T, C>>,
 	it2: Peekable<Iter<'a, T, D>>,
 }
 
 impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> Iterator
 	for SymmetricDifference<'a, T, C, D>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
 {
 	type Item = &'a T;
 
@@ -1031,12 +1164,17 @@ impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> Iterator
 
 impl<'a, T: Ord, C: Slab<Node<T, ()>>, D: Slab<Node<T, ()>>> FusedIterator
 	for SymmetricDifference<'a, T, C, D>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<T, ()>>,
 {
 }
 
 pub struct DrainFilter<'a, T, C: SlabMut<Node<T, ()>>, F>
 where
 	F: FnMut(&T) -> bool,
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
 {
 	pred: F,
 
@@ -1046,6 +1184,8 @@ where
 impl<'a, T: 'a, C: SlabMut<Node<T, ()>>, F> DrainFilter<'a, T, C, F>
 where
 	F: FnMut(&T) -> bool,
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
 {
 	#[inline]
 	pub fn new(set: &'a mut BTreeSet<T, C>, pred: F) -> Self {
@@ -1056,14 +1196,19 @@ where
 	}
 }
 
-impl<'a, T, C: SlabMut<Node<T, ()>>, F> FusedIterator for DrainFilter<'a, T, C, F> where
-	F: FnMut(&T) -> bool
+impl<'a, T, C: SlabMut<Node<T, ()>>, F> FusedIterator for DrainFilter<'a, T, C, F>
+where
+	F: FnMut(&T) -> bool,
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
 {
 }
 
 impl<'a, T, C: SlabMut<Node<T, ()>>, F> Iterator for DrainFilter<'a, T, C, F>
 where
 	F: FnMut(&T) -> bool,
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
 {
 	type Item = T;
 
@@ -1082,6 +1227,8 @@ where
 impl<'a, T, C: SlabMut<Node<T, ()>>, F> Drop for DrainFilter<'a, T, C, F>
 where
 	F: FnMut(&T) -> bool,
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<T, ()>>,
 {
 	fn drop(&mut self) {
 		loop {
@@ -1096,7 +1243,10 @@ pub struct Range<'a, T, C> {
 	inner: map::Range<'a, T, (), C>,
 }
 
-impl<'a, T, C: Slab<Node<T, ()>>> Iterator for Range<'a, T, C> {
+impl<'a, T, C: Slab<Node<T, ()>>> Iterator for Range<'a, T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	type Item = &'a T;
 
 	#[inline]
@@ -1110,11 +1260,17 @@ impl<'a, T, C: Slab<Node<T, ()>>> Iterator for Range<'a, T, C> {
 	}
 }
 
-impl<'a, T, C: Slab<Node<T, ()>>> DoubleEndedIterator for Range<'a, T, C> {
+impl<'a, T, C: Slab<Node<T, ()>>> DoubleEndedIterator for Range<'a, T, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>,
+{
 	#[inline]
 	fn next_back(&mut self) -> Option<&'a T> {
 		self.inner.next_back().map(|(k, ())| k)
 	}
 }
 
-impl<'a, T, C: Slab<Node<T, ()>>> FusedIterator for Range<'a, T, C> {}
+impl<'a, T, C: Slab<Node<T, ()>>> FusedIterator for Range<'a, T, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<T, ()>>
+{
+}

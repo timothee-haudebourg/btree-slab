@@ -15,7 +15,10 @@ pub enum Entry<'a, K, V, C = slab::Slab<Node<K, V>>> {
 
 use Entry::*;
 
-impl<'a, K, V, C: Slab<Node<K, V>>> Entry<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> Entry<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	/// Gets the address of the entry in the B-Tree.
 	#[inline]
 	pub fn address(&self) -> Address {
@@ -44,7 +47,11 @@ impl<'a, K, V, C: Slab<Node<K, V>>> Entry<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> Entry<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> Entry<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	/// Ensures a value is in the entry by inserting the default if empty, and returns
 	/// a mutable reference to the value in the entry.
 	///
@@ -175,7 +182,10 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> Entry<'a, K, V, C> {
 	}
 }
 
-impl<'a, K: fmt::Debug, V: fmt::Debug, C: Slab<Node<K, V>>> fmt::Debug for Entry<'a, K, V, C> {
+impl<'a, K: fmt::Debug, V: fmt::Debug, C: Slab<Node<K, V>>> fmt::Debug for Entry<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	#[inline]
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
@@ -233,7 +243,11 @@ impl<'a, K, V, C: Slab<Node<K, V>>> VacantEntry<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> VacantEntry<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> VacantEntry<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	/// Sets the value of the entry with the `VacantEntry`'s key,
 	/// and returns a mutable reference to it.
 	///
@@ -270,7 +284,10 @@ pub struct OccupiedEntry<'a, K, V, C = slab::Slab<Node<K, V>>> {
 	pub(crate) addr: Address,
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> OccupiedEntry<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	/// Gets the address of the occupied entry in the B-Tree.
 	#[inline]
 	pub fn address(&self) -> Address {
@@ -312,7 +329,11 @@ impl<'a, K, V, C: Slab<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> OccupiedEntry<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	/// Gets a mutable reference to the value in the entry.
 	///
 	/// If you need a reference to the OccupiedEntry that may outlive
@@ -436,6 +457,8 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 
 impl<'a, K: fmt::Debug, V: fmt::Debug, C: Slab<Node<K, V>>> fmt::Debug
 	for OccupiedEntry<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
 {
 	#[inline]
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

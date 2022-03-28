@@ -8,7 +8,7 @@ use btree_slab::{
 };
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 
-const SEED: &'static [u8; 16] = b"testseedtestseed";
+const SEED: &'static [u8; 32] = b"testseedtestseedtestseedtestseed";
 
 #[test]
 pub fn insert() {

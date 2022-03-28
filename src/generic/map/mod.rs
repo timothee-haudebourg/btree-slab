@@ -218,7 +218,10 @@ impl<K, V, C> BTreeMap<K, V, C> {
 	}
 }
 
-impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
+impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	/// Returns the key-value pair corresponding to the supplied key.
 	///
 	/// The supplied key may be any borrowed form of the map's key type, but the ordering
@@ -498,7 +501,11 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	}
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
+impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	/// Clears the map, removing all elements.
 	///
 	/// # Example
@@ -604,7 +611,8 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// ```
 	#[inline]
 	pub fn first_entry(&mut self) -> Option<OccupiedEntry<K, V, C>> {
-		self.first_item_address().map(move |addr| OccupiedEntry { map: self, addr })
+		self.first_item_address()
+			.map(move |addr| OccupiedEntry { map: self, addr })
 	}
 
 	/// Returns the last entry in the map for in-place manipulation.
@@ -628,7 +636,8 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// ```
 	#[inline]
 	pub fn last_entry(&mut self) -> Option<OccupiedEntry<K, V, C>> {
-		self.last_item_address().map(move |addr| OccupiedEntry { map: self, addr })
+		self.last_item_address()
+			.map(move |addr| OccupiedEntry { map: self, addr })
 	}
 
 	/// Insert a key-value pair in the tree.
@@ -1268,10 +1277,8 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 					addr.id = left_id;
 					addr.offset = left_offset
 				}
-				Some(Ordering::Greater) => {
-					addr.offset.decr()
-				},
-				_ => ()
+				Some(Ordering::Greater) => addr.offset.decr(),
+				_ => (),
 			}
 		} else if addr.id == right_id {
 			addr.id = left_id;
@@ -1286,6 +1293,7 @@ impl<K: Ord, Q: ?Sized, V, C: Slab<Node<K, V>>> Index<&Q> for BTreeMap<K, V, C>
 where
 	K: Borrow<Q>,
 	Q: Ord,
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
 {
 	type Output = V;
 
@@ -1302,6 +1310,9 @@ where
 
 impl<K, L: PartialEq<K>, V, W: PartialEq<V>, C: Slab<Node<K, V>>, D: Slab<Node<L, W>>>
 	PartialEq<BTreeMap<L, W, D>> for BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<L, W>>,
 {
 	fn eq(&self, other: &BTreeMap<L, W, D>) -> bool {
 		if self.len() == other.len() {
@@ -1334,7 +1345,11 @@ impl<K, V, C: Default> Default for BTreeMap<K, V, C> {
 	}
 }
 
-impl<K: Ord, V, C: SlabMut<Node<K, V>> + Default> FromIterator<(K, V)> for BTreeMap<K, V, C> {
+impl<K: Ord, V, C: SlabMut<Node<K, V>> + Default> FromIterator<(K, V)> for BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	#[inline]
 	fn from_iter<T>(iter: T) -> BTreeMap<K, V, C>
 	where
@@ -1350,7 +1365,11 @@ impl<K: Ord, V, C: SlabMut<Node<K, V>> + Default> FromIterator<(K, V)> for BTree
 	}
 }
 
-impl<K: Ord, V, C: SlabMut<Node<K, V>>> Extend<(K, V)> for BTreeMap<K, V, C> {
+impl<K: Ord, V, C: SlabMut<Node<K, V>>> Extend<(K, V)> for BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	#[inline]
 	fn extend<T>(&mut self, iter: T)
 	where
@@ -1364,6 +1383,9 @@ impl<K: Ord, V, C: SlabMut<Node<K, V>>> Extend<(K, V)> for BTreeMap<K, V, C> {
 
 impl<'a, K: Ord + Copy, V: Copy, C: SlabMut<Node<K, V>>> Extend<(&'a K, &'a V)>
 	for BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
 {
 	#[inline]
 	fn extend<T>(&mut self, iter: T)
@@ -1374,10 +1396,16 @@ impl<'a, K: Ord + Copy, V: Copy, C: SlabMut<Node<K, V>>> Extend<(&'a K, &'a V)>
 	}
 }
 
-impl<K: Eq, V: Eq, C: Slab<Node<K, V>>> Eq for BTreeMap<K, V, C> {}
+impl<K: Eq, V: Eq, C: Slab<Node<K, V>>> Eq for BTreeMap<K, V, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>
+{
+}
 
 impl<K, L: PartialOrd<K>, V, W: PartialOrd<V>, C: Slab<Node<K, V>>, D: Slab<Node<L, W>>>
 	PartialOrd<BTreeMap<L, W, D>> for BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> D::ItemRef<'r>: Into<&'r Node<L, W>>,
 {
 	fn partial_cmp(&self, other: &BTreeMap<L, W, D>) -> Option<Ordering> {
 		let mut it1 = self.iter();
@@ -1404,7 +1432,10 @@ impl<K, L: PartialOrd<K>, V, W: PartialOrd<V>, C: Slab<Node<K, V>>, D: Slab<Node
 	}
 }
 
-impl<K: Ord, V: Ord, C: Slab<Node<K, V>>> Ord for BTreeMap<K, V, C> {
+impl<K: Ord, V: Ord, C: Slab<Node<K, V>>> Ord for BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	fn cmp(&self, other: &BTreeMap<K, V, C>) -> Ordering {
 		let mut it1 = self.iter();
 		let mut it2 = other.iter();
@@ -1428,7 +1459,10 @@ impl<K: Ord, V: Ord, C: Slab<Node<K, V>>> Ord for BTreeMap<K, V, C> {
 	}
 }
 
-impl<K: Hash, V: Hash, C: Slab<Node<K, V>>> Hash for BTreeMap<K, V, C> {
+impl<K: Hash, V: Hash, C: Slab<Node<K, V>>> Hash for BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	#[inline]
 	fn hash<H: Hasher>(&self, h: &mut H) {
 		for (k, v) in self {
@@ -1450,7 +1484,10 @@ pub struct Iter<'a, K, V, C> {
 	len: usize,
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> Iter<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> Iter<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	#[inline]
 	fn new(btree: &'a BTreeMap<K, V, C>) -> Self {
 		let addr = btree.first_item_address();
@@ -1464,7 +1501,10 @@ impl<'a, K, V, C: Slab<Node<K, V>>> Iter<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Iter<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Iter<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	type Item = (&'a K, &'a V);
 
 	#[inline]
@@ -1491,10 +1531,19 @@ impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Iter<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Iter<'a, K, V, C> {}
-impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Iter<'a, K, V, C> {}
+impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Iter<'a, K, V, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>
+{
+}
+impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Iter<'a, K, V, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>
+{
+}
 
-impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Iter<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Iter<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	#[inline]
 	fn next_back(&mut self) -> Option<(&'a K, &'a V)> {
 		if self.len > 0 {
@@ -1514,7 +1563,10 @@ impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Iter<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> IntoIterator for &'a BTreeMap<K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> IntoIterator for &'a BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	type IntoIter = Iter<'a, K, V, C>;
 	type Item = (&'a K, &'a V);
 
@@ -1536,7 +1588,11 @@ pub struct IterMut<'a, K, V, C> {
 	len: usize,
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> IterMut<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> IterMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	#[inline]
 	fn new(btree: &'a mut BTreeMap<K, V, C>) -> Self {
 		let addr = btree.first_item_address();
@@ -1586,7 +1642,11 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for IterMut<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for IterMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	type Item = (&'a K, &'a mut V);
 
 	#[inline]
@@ -1603,10 +1663,24 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for IterMut<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for IterMut<'a, K, V, C> {}
-impl<'a, K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IterMut<'a, K, V, C> {}
+impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for IterMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
+}
+impl<'a, K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IterMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
+}
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IterMut<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IterMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	#[inline]
 	fn next_back(&mut self) -> Option<(&'a K, &'a mut V)> {
 		self.next_back_item().map(|item| {
@@ -1627,7 +1701,11 @@ pub struct EntriesMut<'a, K, V, C> {
 	len: usize,
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> EntriesMut<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> EntriesMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	/// Create a new iterator over all the items of the map.
 	#[inline]
 	fn new(btree: &'a mut BTreeMap<K, V, C>) -> EntriesMut<'a, K, V, C> {
@@ -1656,7 +1734,7 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> EntriesMut<'a, K, V, C> {
 			Some(item) => unsafe {
 				self.len -= 1;
 				self.addr = after_addr.unwrap();
-				Some(&mut * (item as *mut _)) // this is safe because only one mutable reference to the same item can be emitted.
+				Some(&mut *(item as *mut _)) // this is safe because only one mutable reference to the same item can be emitted.
 			},
 			None => None,
 		}
@@ -1695,7 +1773,11 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> EntriesMut<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for EntriesMut<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for EntriesMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	type Item = (&'a K, &'a mut V);
 
 	#[inline]
@@ -1735,7 +1817,10 @@ pub struct IntoIter<K, V, C> {
 	len: usize,
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> IntoIter<K, V, C> {
+impl<K, V, C: SlabMut<Node<K, V>>> IntoIter<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	#[inline]
 	pub fn new(btree: BTreeMap<K, V, C>) -> Self {
 		let addr = btree.first_item_address();
@@ -1749,10 +1834,24 @@ impl<K, V, C: SlabMut<Node<K, V>>> IntoIter<K, V, C> {
 	}
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoIter<K, V, C> {}
-impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoIter<K, V, C> {}
+impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoIter<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
+}
+impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoIter<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
+}
 
-impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoIter<K, V, C> {
+impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoIter<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	type Item = (K, V);
 
 	#[inline]
@@ -1820,7 +1919,11 @@ impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoIter<K, V, C> {
 	}
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IntoIter<K, V, C> {
+impl<K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IntoIter<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	fn next_back(&mut self) -> Option<(K, V)> {
 		if self.len > 0 {
 			let addr = match self.end {
@@ -1878,7 +1981,11 @@ impl<K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IntoIter<K, V, C> {
 	}
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> IntoIterator for BTreeMap<K, V, C> {
+impl<K, V, C: SlabMut<Node<K, V>>> IntoIterator for BTreeMap<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	type IntoIter = IntoIter<K, V, C>;
 	type Item = (K, V);
 
@@ -1898,7 +2005,11 @@ pub(crate) struct DrainFilterInner<'a, K, V, C> {
 	len: usize,
 }
 
-impl<'a, K: 'a, V: 'a, C: SlabMut<Node<K, V>>> DrainFilterInner<'a, K, V, C> {
+impl<'a, K: 'a, V: 'a, C: SlabMut<Node<K, V>>> DrainFilterInner<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	#[inline]
 	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> Self {
 		let addr = btree.first_back_address();
@@ -1946,6 +2057,8 @@ impl<'a, K: 'a, V: 'a, C: SlabMut<Node<K, V>>> DrainFilterInner<'a, K, V, C> {
 pub struct DrainFilter<'a, K, V, C: SlabMut<Node<K, V>>, F>
 where
 	F: FnMut(&K, &mut V) -> bool,
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
 {
 	pred: F,
 
@@ -1955,6 +2068,8 @@ where
 impl<'a, K: 'a, V: 'a, C: SlabMut<Node<K, V>>, F> DrainFilter<'a, K, V, C, F>
 where
 	F: FnMut(&K, &mut V) -> bool,
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
 {
 	#[inline]
 	fn new(btree: &'a mut BTreeMap<K, V, C>, pred: F) -> Self {
@@ -1965,14 +2080,19 @@ where
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>, F> FusedIterator for DrainFilter<'a, K, V, C, F> where
-	F: FnMut(&K, &mut V) -> bool
+impl<'a, K, V, C: SlabMut<Node<K, V>>, F> FusedIterator for DrainFilter<'a, K, V, C, F>
+where
+	F: FnMut(&K, &mut V) -> bool,
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
 {
 }
 
 impl<'a, K, V, C: SlabMut<Node<K, V>>, F> Iterator for DrainFilter<'a, K, V, C, F>
 where
 	F: FnMut(&K, &mut V) -> bool,
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
 {
 	type Item = (K, V);
 
@@ -1990,6 +2110,8 @@ where
 impl<'a, K, V, C: SlabMut<Node<K, V>>, F> Drop for DrainFilter<'a, K, V, C, F>
 where
 	F: FnMut(&K, &mut V) -> bool,
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
 {
 	#[inline]
 	fn drop(&mut self) {
@@ -2005,10 +2127,19 @@ pub struct Keys<'a, K, V, C> {
 	inner: Iter<'a, K, V, C>,
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Keys<'a, K, V, C> {}
-impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Keys<'a, K, V, C> {}
+impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Keys<'a, K, V, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>
+{
+}
+impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Keys<'a, K, V, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>
+{
+}
 
-impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Keys<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Keys<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	type Item = &'a K;
 
 	#[inline]
@@ -2022,21 +2153,38 @@ impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Keys<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Keys<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Keys<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	#[inline]
 	fn next_back(&mut self) -> Option<&'a K> {
 		self.inner.next_back().map(|(k, _)| k)
 	}
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoKeys<K, V, C> {}
-impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoKeys<K, V, C> {}
+impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoKeys<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
+}
+impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoKeys<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
+}
 
 pub struct IntoKeys<K, V, C> {
 	inner: IntoIter<K, V, C>,
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoKeys<K, V, C> {
+impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoKeys<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	type Item = K;
 
 	#[inline]
@@ -2050,21 +2198,34 @@ impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoKeys<K, V, C> {
 	}
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IntoKeys<K, V, C> {
+impl<K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IntoKeys<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	#[inline]
 	fn next_back(&mut self) -> Option<K> {
 		self.inner.next_back().map(|(k, _)| k)
 	}
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Values<'a, K, V, C> {}
-impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Values<'a, K, V, C> {}
+impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Values<'a, K, V, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>
+{
+}
+impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Values<'a, K, V, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>
+{
+}
 
 pub struct Values<'a, K, V, C> {
 	inner: Iter<'a, K, V, C>,
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Values<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Values<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	type Item = &'a V;
 
 	#[inline]
@@ -2078,7 +2239,10 @@ impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Values<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Values<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Values<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	#[inline]
 	fn next_back(&mut self) -> Option<&'a V> {
 		self.inner.next_back().map(|(_, v)| v)
@@ -2089,10 +2253,24 @@ pub struct ValuesMut<'a, K, V, C> {
 	inner: IterMut<'a, K, V, C>,
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for ValuesMut<'a, K, V, C> {}
-impl<'a, K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for ValuesMut<'a, K, V, C> {}
+impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for ValuesMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
+}
+impl<'a, K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for ValuesMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
+}
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for ValuesMut<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for ValuesMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	type Item = &'a mut V;
 
 	#[inline]
@@ -2110,10 +2288,24 @@ pub struct IntoValues<K, V, C> {
 	inner: IntoIter<K, V, C>,
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoValues<K, V, C> {}
-impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoValues<K, V, C> {}
+impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoValues<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
+}
+impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoValues<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
+}
 
-impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoValues<K, V, C> {
+impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoValues<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	type Item = V;
 
 	#[inline]
@@ -2127,7 +2319,11 @@ impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoValues<K, V, C> {
 	}
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IntoValues<K, V, C> {
+impl<K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IntoValues<K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	#[inline]
 	fn next_back(&mut self) -> Option<V> {
 		self.inner.next_back().map(|(_, v)| v)
@@ -2160,7 +2356,10 @@ pub struct Range<'a, K, V, C> {
 	end: Address,
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> Range<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> Range<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	fn new<T, R>(btree: &'a BTreeMap<K, V, C>, range: R) -> Self
 	where
 		T: Ord + ?Sized,
@@ -2199,7 +2398,10 @@ impl<'a, K, V, C: Slab<Node<K, V>>> Range<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Range<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Range<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	type Item = (&'a K, &'a V);
 
 	#[inline]
@@ -2214,9 +2416,15 @@ impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Range<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Range<'a, K, V, C> {}
+impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Range<'a, K, V, C> where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>
+{
+}
 
-impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Range<'a, K, V, C> {
+impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Range<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+{
 	#[inline]
 	fn next_back(&mut self) -> Option<(&'a K, &'a V)> {
 		if self.addr != self.end {
@@ -2240,7 +2448,11 @@ pub struct RangeMut<'a, K, V, C> {
 	end: Address,
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> RangeMut<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> RangeMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	fn new<T, R>(btree: &'a mut BTreeMap<K, V, C>, range: R) -> Self
 	where
 		T: Ord + ?Sized,
@@ -2303,7 +2515,11 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> RangeMut<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for RangeMut<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for RangeMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	type Item = (&'a K, &'a mut V);
 
 	#[inline]
@@ -2315,9 +2531,18 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for RangeMut<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for RangeMut<'a, K, V, C> {}
+impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for RangeMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
+}
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for RangeMut<'a, K, V, C> {
+impl<'a, K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for RangeMut<'a, K, V, C>
+where
+	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+{
 	#[inline]
 	fn next_back(&mut self) -> Option<(&'a K, &'a mut V)> {
 		self.next_back_item().map(|item| {

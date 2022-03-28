@@ -64,7 +64,7 @@ pub struct InsertionError<K, V> {
 	pub child_offset: usize,
 
 	/// Id of the child in which the key should be inserted instead.
-	pub child_id: usize
+	pub child_id: usize,
 }
 
 /// Internal node.
@@ -297,8 +297,8 @@ impl<K, V> Internal<K, V> {
 	}
 
 	/// Insert by key.
-	/// 
-	/// 
+	///
+	///
 	#[inline]
 	pub fn insert_by_key(
 		&mut self,
@@ -318,7 +318,7 @@ impl<K, V> Internal<K, V> {
 						key,
 						value,
 						child_offset: i + 1,
-						child_id: self.other_children[i].child
+						child_id: self.other_children[i].child,
 					})
 				}
 			}
@@ -326,7 +326,7 @@ impl<K, V> Internal<K, V> {
 				key,
 				value,
 				child_offset: 0,
-				child_id: self.first_child
+				child_id: self.first_child,
 			}),
 		}
 	}
