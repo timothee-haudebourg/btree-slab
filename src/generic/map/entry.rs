@@ -1,29 +1,16 @@
+use crate::generic::{
+	map::{BTreeExt, BTreeExtMut, BTreeMap},
+	node::{Address, Item, Node},
+};
+use cc_traits::{Slab, SlabMut};
 use std::fmt;
-use cc_traits::{
-	Slab,
-	SlabMut
-};
-use crate::{
-	generic::{
-		map::{
-			BTreeMap,
-			BTreeExt,
-			BTreeExtMut
-		},
-		node::{
-			Node,
-			Item,
-			Address
-		}
-	}
-};
 
 /// A view into a single entry in a map, which may either be vacant or occupied.
 ///
 /// This enum is constructed from the [`entry`](`BTreeMap#entry`) method on [`BTreeMap`].
 pub enum Entry<'a, K, V, C = slab::Slab<Node<K, V>>> {
 	Vacant(VacantEntry<'a, K, V, C>),
-	Occupied(OccupiedEntry<'a, K, V, C>)
+	Occupied(OccupiedEntry<'a, K, V, C>),
 }
 
 use Entry::*;
@@ -34,7 +21,7 @@ impl<'a, K, V, C: Slab<Node<K, V>>> Entry<'a, K, V, C> {
 	pub fn address(&self) -> Address {
 		match self {
 			Occupied(entry) => entry.address(),
-			Vacant(entry) => entry.address()
+			Vacant(entry) => entry.address(),
 		}
 	}
 
@@ -100,7 +87,7 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> Entry<'a, K, V, C> {
 			Occupied(entry) => entry.into_mut(),
 			Vacant(entry) => entry.insert(default()),
 		}
-    }
+	}
 
 	/// Ensures a value is in the entry by inserting, if empty, the result of the default function,
 	/// which takes the key as its argument, and returns a mutable reference to the value in the
@@ -150,7 +137,10 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> Entry<'a, K, V, C> {
 	/// assert_eq!(map["poneyland"], 43);
 	/// ```
 	#[inline]
-	pub fn and_modify<F>(self, f: F) -> Self where F: FnOnce(&mut V) {
+	pub fn and_modify<F>(self, f: F) -> Self
+	where
+		F: FnOnce(&mut V),
+	{
 		match self {
 			Occupied(mut entry) => {
 				f(entry.get_mut());
@@ -174,7 +164,10 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> Entry<'a, K, V, C> {
 	/// assert_eq!(map["poneyland"], None);
 	/// ```
 	#[inline]
-	pub fn or_default(self) -> &'a mut V where V: Default {
+	pub fn or_default(self) -> &'a mut V
+	where
+		V: Default,
+	{
 		match self {
 			Occupied(entry) => entry.into_mut(),
 			Vacant(entry) => entry.insert(Default::default()),
@@ -187,7 +180,7 @@ impl<'a, K: fmt::Debug, V: fmt::Debug, C: Slab<Node<K, V>>> fmt::Debug for Entry
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			Occupied(entry) => entry.fmt(f),
-			Vacant(entry) => entry.fmt(f)
+			Vacant(entry) => entry.fmt(f),
 		}
 	}
 }
@@ -197,7 +190,7 @@ impl<'a, K: fmt::Debug, V: fmt::Debug, C: Slab<Node<K, V>>> fmt::Debug for Entry
 pub struct VacantEntry<'a, K, V, C = slab::Slab<Node<K, V>>> {
 	pub(crate) map: &'a mut BTreeMap<K, V, C>,
 	pub(crate) key: K,
-	pub(crate) addr: Address
+	pub(crate) addr: Address,
 }
 
 impl<'a, K, V, C: Slab<Node<K, V>>> VacantEntry<'a, K, V, C> {
@@ -274,7 +267,7 @@ impl<'a, K: fmt::Debug, V, C: Slab<Node<K, V>>> fmt::Debug for VacantEntry<'a, K
 /// It is part of the [`Entry`] enum.
 pub struct OccupiedEntry<'a, K, V, C = slab::Slab<Node<K, V>>> {
 	pub(crate) map: &'a mut BTreeMap<K, V, C>,
-	pub(crate) addr: Address
+	pub(crate) addr: Address,
 }
 
 impl<'a, K, V, C: Slab<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
@@ -413,7 +406,7 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	/// // println!("{}", map["poneyland"]);
 	/// ```
 	#[inline]
-    pub fn remove(self) -> V {
+	pub fn remove(self) -> V {
 		self.map.remove_at(self.addr).unwrap().0.into_value()
 	}
 
@@ -441,9 +434,14 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> OccupiedEntry<'a, K, V, C> {
 	}
 }
 
-impl<'a, K: fmt::Debug, V: fmt::Debug, C: Slab<Node<K, V>>> fmt::Debug for OccupiedEntry<'a, K, V, C> {
+impl<'a, K: fmt::Debug, V: fmt::Debug, C: Slab<Node<K, V>>> fmt::Debug
+	for OccupiedEntry<'a, K, V, C>
+{
 	#[inline]
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		f.debug_struct("OccupiedEntry").field("key", self.key()).field("value", self.get()).finish()
+		f.debug_struct("OccupiedEntry")
+			.field("key", self.key())
+			.field("value", self.get())
+			.finish()
 	}
 }

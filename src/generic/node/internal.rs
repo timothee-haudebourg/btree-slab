@@ -1,31 +1,20 @@
-use std::{
-	borrow::Borrow,
-	cmp::Ordering
-};
-use smallvec::SmallVec;
 use crate::{
 	generic::{
 		map::M,
-		node::{
-			Item,
-			Offset,
-			Keyed,
-			Children,
-			ChildrenWithSeparators,
-			Balance,
-			WouldUnderflow
-		}
+		node::{Balance, Children, ChildrenWithSeparators, Item, Keyed, Offset, WouldUnderflow},
 	},
-	utils::binary_search_min
+	utils::binary_search_min,
 };
+use smallvec::SmallVec;
+use std::{borrow::Borrow, cmp::Ordering};
 
 /// Underflow threshold.
-/// 
+///
 /// An internal node is underflowing if it has less items than this constant.
-const UNDERFLOW: usize = M/2 - 1;
+const UNDERFLOW: usize = M / 2 - 1;
 
 /// Internal node branch.
-/// 
+///
 /// A branch is an item followed by child node identifier.
 #[derive(Clone)]
 pub struct Branch<K, V> {
@@ -33,7 +22,7 @@ pub struct Branch<K, V> {
 	pub item: Item<K, V>,
 
 	/// Following child node identifier.
-	pub child: usize
+	pub child: usize,
 }
 
 impl<K, V> AsRef<Item<K, V>> for Branch<K, V> {
@@ -63,30 +52,50 @@ impl<K: Ord + PartialEq, V> PartialOrd for Branch<K, V> {
 	}
 }
 
+/// Error returned when a direct insertion by key in the internal node failed.
+pub struct InsertionError<K, V> {
+	/// Inserted key.
+	pub key: K,
+
+	/// Inserted value.
+	pub value: V,
+
+	/// Offset of the child in which the key should be inserted instead.
+	pub child_offset: usize,
+
+	/// Id of the child in which the key should be inserted instead.
+	pub child_id: usize
+}
+
 /// Internal node.
-/// 
+///
 /// An internal node is a node where each item is surrounded by edges to child nodes.
 #[derive(Clone)]
 pub struct Internal<K, V> {
 	parent: usize,
 	first_child: usize,
-	other_children: SmallVec<[Branch<K, V>; M]>
+	other_children: SmallVec<[Branch<K, V>; M]>,
 }
 
 impl<K, V> Internal<K, V> {
 	/// Creates a binary node (with a single item and two children).
 	#[inline]
-	pub fn binary(parent: Option<usize>, left_id: usize, median: Item<K, V>, right_id: usize) -> Internal<K, V> {
+	pub fn binary(
+		parent: Option<usize>,
+		left_id: usize,
+		median: Item<K, V>,
+		right_id: usize,
+	) -> Internal<K, V> {
 		let mut other_children = SmallVec::new();
 		other_children.push(Branch {
 			item: median,
-			child: right_id
+			child: right_id,
 		});
 
 		Internal {
 			parent: parent.unwrap_or(std::usize::MAX),
 			first_child: left_id,
-			other_children
+			other_children,
 		}
 	}
 
@@ -153,7 +162,7 @@ impl<K, V> Internal<K, V> {
 		} else {
 			for i in 0..self.other_children.len() {
 				if self.other_children[i].child == id {
-					return Some(i+1)
+					return Some(i + 1);
 				}
 			}
 
@@ -197,7 +206,11 @@ impl<K, V> Internal<K, V> {
 	}
 
 	#[inline]
-	pub fn get<Q: ?Sized>(&self, key: &Q) -> Result<&V, usize> where K: Borrow<Q>, Q: Ord {
+	pub fn get<Q: ?Sized>(&self, key: &Q) -> Result<&V, usize>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match binary_search_min(&self.other_children, key) {
 			Some(offset) => {
 				let b = &self.other_children[offset];
@@ -206,13 +219,17 @@ impl<K, V> Internal<K, V> {
 				} else {
 					Err(b.child)
 				}
-			},
-			None => Err(self.first_child)
+			}
+			None => Err(self.first_child),
 		}
 	}
 
 	#[inline]
-	pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Result<&mut V, usize> where K: Borrow<Q>, Q: Ord {
+	pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Result<&mut V, usize>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match binary_search_min(&self.other_children, key) {
 			Some(offset) => {
 				let b = &mut self.other_children[offset];
@@ -221,8 +238,8 @@ impl<K, V> Internal<K, V> {
 				} else {
 					Err(b.child)
 				}
-			},
-			None => Err(self.first_child)
+			}
+			None => Err(self.first_child),
 		}
 	}
 
@@ -231,17 +248,21 @@ impl<K, V> Internal<K, V> {
 	/// If the key matches no item in this node,
 	/// this funtion returns the index and id of the child that may match the key.
 	#[inline]
-	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<Offset, (usize, usize)> where K: Borrow<Q>, Q: Ord {
+	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<Offset, (usize, usize)>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match binary_search_min(&self.other_children, key) {
 			Some(offset) => {
 				if self.other_children[offset].item.key().borrow() == key {
 					Ok(offset.into())
 				} else {
 					let id = self.other_children[offset].child;
-					Err((offset+1, id))
+					Err((offset + 1, id))
 				}
-			},
-			None => Err((0, self.first_child))
+			}
+			None => Err((0, self.first_child)),
 		}
 	}
 
@@ -252,14 +273,18 @@ impl<K, V> Internal<K, V> {
 
 	#[inline]
 	pub fn children_with_separators(&self) -> ChildrenWithSeparators<K, V> {
-		ChildrenWithSeparators::Internal(Some(self.first_child), None, self.other_children.as_ref().iter().peekable())
+		ChildrenWithSeparators::Internal(
+			Some(self.first_child),
+			None,
+			self.other_children.as_ref().iter().peekable(),
+		)
 	}
 
 	#[inline]
 	pub fn item(&self, offset: Offset) -> Option<&Item<K, V>> {
 		match self.other_children.get(offset.unwrap()) {
 			Some(b) => Some(&b.item),
-			None => None
+			None => None,
 		}
 	}
 
@@ -267,25 +292,42 @@ impl<K, V> Internal<K, V> {
 	pub fn item_mut(&mut self, offset: Offset) -> Option<&mut Item<K, V>> {
 		match self.other_children.get_mut(offset.unwrap()) {
 			Some(b) => Some(&mut b.item),
-			None => None
+			None => None,
 		}
 	}
 
-	/// Insert by key
+	/// Insert by key.
+	/// 
+	/// 
 	#[inline]
-	pub fn insert_by_key(&mut self, key: K, mut value: V) -> Result<(Offset, V), (K, V, usize, usize)> where K: Ord {
+	pub fn insert_by_key(
+		&mut self,
+		key: K,
+		mut value: V,
+	) -> Result<(Offset, V), InsertionError<K, V>>
+	where
+		K: Ord,
+	{
 		match binary_search_min(&self.other_children, &key) {
 			Some(i) => {
 				if self.other_children[i].item.key() == &key {
 					std::mem::swap(&mut value, self.other_children[i].item.value_mut());
 					Ok((i.into(), value))
 				} else {
-					Err((key, value, i+1, self.other_children[i].child))
+					Err(InsertionError {
+						key,
+						value,
+						child_offset: i + 1,
+						child_id: self.other_children[i].child
+					})
 				}
-			},
-			None => {
-				Err((key, value, 0, self.first_child))
 			}
+			None => Err(InsertionError {
+				key,
+				value,
+				child_offset: 0,
+				child_id: self.first_child
+			}),
 		}
 	}
 
@@ -309,10 +351,13 @@ impl<K, V> Internal<K, V> {
 	/// Insert item at the given offset.
 	#[inline]
 	pub fn insert(&mut self, offset: Offset, item: Item<K, V>, right_node_id: usize) {
-		self.other_children.insert(offset.unwrap(), Branch {
-			item,
-			child: right_node_id
-		});
+		self.other_children.insert(
+			offset.unwrap(),
+			Branch {
+				item,
+				child: right_node_id,
+			},
+		);
 	}
 
 	/// Replace the item at the given offset.
@@ -340,13 +385,13 @@ impl<K, V> Internal<K, V> {
 		// Index of the median-key item in `other_children`.
 		let median_i = (self.other_children.len() - 1) / 2; // Since M is at least 3, `median_i` is at least 1.
 
-		let right_other_children = self.other_children.drain(median_i+1..).collect();
+		let right_other_children = self.other_children.drain(median_i + 1..).collect();
 		let median = self.other_children.pop().unwrap();
 
 		let right_node = Internal {
 			parent: self.parent,
 			first_child: median.child,
-			other_children: right_other_children
+			other_children: right_other_children,
 		};
 
 		assert!(!self.is_underflowing());
@@ -362,7 +407,11 @@ impl<K, V> Internal<K, V> {
 	/// the item removed from this node to be merged with the merged children and
 	/// the balance status of this node after the merging operation.
 	#[inline]
-	pub fn merge(&mut self, left_index: usize, right_index: usize) -> (usize, usize, usize, Item<K, V>, Balance) {
+	pub fn merge(
+		&mut self,
+		left_index: usize,
+		right_index: usize,
+	) -> (usize, usize, usize, Item<K, V>, Balance) {
 		let left_id = self.child_id(left_index);
 		let right_id = self.child_id(right_index);
 
@@ -375,10 +424,13 @@ impl<K, V> Internal<K, V> {
 
 	#[inline]
 	pub fn push_left(&mut self, item: Item<K, V>, child_id: usize) {
-		self.other_children.insert(0, Branch {
-			item,
-			child: self.first_child
-		});
+		self.other_children.insert(
+			0,
+			Branch {
+				item,
+				child: self.first_child,
+			},
+		);
 		self.first_child = child_id
 	}
 
@@ -399,7 +451,7 @@ impl<K, V> Internal<K, V> {
 		let offset = self.other_children.len();
 		self.other_children.push(Branch {
 			item,
-			child: child_id
+			child: child_id,
 		});
 		offset.into()
 	}
@@ -420,7 +472,7 @@ impl<K, V> Internal<K, V> {
 		let offset = self.other_children.len();
 		self.other_children.push(Branch {
 			item: separator,
-			child: other.first_child
+			child: other.first_child,
 		});
 
 		self.other_children.append(&mut other.other_children);
@@ -432,11 +484,21 @@ impl<K, V> Internal<K, V> {
 	/// Requires the `dot` feature.
 	#[cfg(feature = "dot")]
 	#[inline]
-	pub fn dot_write_label<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+	pub fn dot_write_label<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()>
+	where
+		K: std::fmt::Display,
+		V: std::fmt::Display,
+	{
 		write!(f, "<c0> |")?;
 		let mut i = 1;
 		for branch in &self.other_children {
-			write!(f, "{{{}|<c{}> {}}} |", branch.item.key(), i, branch.item.value())?;
+			write!(
+				f,
+				"{{{}|<c{}> {}}} |",
+				branch.item.key(),
+				i,
+				branch.item.value()
+			)?;
 			i += 1;
 		}
 
@@ -444,21 +506,23 @@ impl<K, V> Internal<K, V> {
 	}
 
 	#[cfg(debug_assertions)]
-	pub fn validate(&self, parent: Option<usize>, min: Option<&K>, max: Option<&K>) where K: Ord {
+	pub fn validate(&self, parent: Option<usize>, min: Option<&K>, max: Option<&K>)
+	where
+		K: Ord,
+	{
 		if self.parent() != parent {
 			panic!("wrong parent")
 		}
 
-		if min.is_some() || max.is_some() { // not root
+		if min.is_some() || max.is_some() {
+			// not root
 			match self.balance() {
 				Balance::Overflow => panic!("internal node is overflowing"),
 				Balance::Underflow(_) => panic!("internal node is underflowing"),
-				_ => ()
+				_ => (),
 			}
-		} else {
-			if self.item_count() == 0 {
-				panic!("root node is empty")
-			}
+		} else if self.item_count() == 0 {
+			panic!("root node is empty")
 		}
 
 		if !self.other_children.is_sorted() {

@@ -1,8 +1,5 @@
-use std::{
-	rc::Rc,
-	cell::Cell
-};
 use btree_slab::BTreeMap;
+use std::{cell::Cell, rc::Rc};
 
 #[test]
 pub fn iter() {
@@ -25,14 +22,14 @@ pub fn into_iter() {
 	struct Element {
 		/// Drop counter.
 		counter: Rc<Cell<usize>>,
-		value: i32
+		value: i32,
 	}
 
 	impl Element {
 		pub fn new(counter: &Rc<Cell<usize>>, value: i32) -> Self {
 			Element {
 				counter: counter.clone(),
-				value
+				value,
 			}
 		}
 
@@ -66,14 +63,14 @@ pub fn into_iter_rev() {
 	struct Element {
 		/// Drop counter.
 		counter: Rc<Cell<usize>>,
-		value: i32
+		value: i32,
 	}
 
 	impl Element {
 		pub fn new(counter: &Rc<Cell<usize>>, value: i32) -> Self {
 			Element {
 				counter: counter.clone(),
-				value
+				value,
 			}
 		}
 
@@ -107,14 +104,14 @@ pub fn into_iter_both_ends1() {
 	struct Element {
 		/// Drop counter.
 		counter: Rc<Cell<usize>>,
-		value: i32
+		value: i32,
 	}
 
 	impl Element {
 		pub fn new(counter: &Rc<Cell<usize>>, value: i32) -> Self {
 			Element {
 				counter: counter.clone(),
-				value
+				value,
 			}
 		}
 
@@ -152,14 +149,14 @@ pub fn into_iter_both_ends2() {
 	struct Element {
 		/// Drop counter.
 		counter: Rc<Cell<usize>>,
-		value: i32
+		value: i32,
 	}
 
 	impl Element {
 		pub fn new(counter: &Rc<Cell<usize>>, value: i32) -> Self {
 			Element {
 				counter: counter.clone(),
-				value
+				value,
 			}
 		}
 

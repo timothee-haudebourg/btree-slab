@@ -1,24 +1,17 @@
-use std::borrow::Borrow;
-use smallvec::SmallVec;
 use crate::{
 	generic::{
-		map::{
-			M,
-		},
-		node::{
-			Item,
-			Offset,
-			Balance,
-			WouldUnderflow
-		}
+		map::M,
+		node::{Balance, Item, Offset, WouldUnderflow},
 	},
-	utils::binary_search_min
+	utils::binary_search_min,
 };
+use smallvec::SmallVec;
+use std::borrow::Borrow;
 
 #[derive(Clone)]
 pub struct Leaf<K, V> {
 	parent: usize,
-	items: SmallVec<[Item<K, V>; M+1]>
+	items: SmallVec<[Item<K, V>; M + 1]>,
 }
 
 impl<K, V> Leaf<K, V> {
@@ -29,7 +22,7 @@ impl<K, V> Leaf<K, V> {
 
 		Leaf {
 			parent: parent.unwrap_or(std::usize::MAX),
-			items
+			items,
 		}
 	}
 
@@ -63,7 +56,11 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[inline]
-	pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V> where K: Borrow<Q>, Q: Ord {
+	pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match binary_search_min(&self.items, key) {
 			Some(i) => {
 				let item = &self.items[i];
@@ -72,13 +69,17 @@ impl<K, V> Leaf<K, V> {
 				} else {
 					None
 				}
-			},
-			_ => None
+			}
+			_ => None,
 		}
 	}
 
 	#[inline]
-	pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V> where K: Borrow<Q>, Q: Ord {
+	pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match binary_search_min(&self.items, key) {
 			Some(i) => {
 				let item = &mut self.items[i];
@@ -87,23 +88,27 @@ impl<K, V> Leaf<K, V> {
 				} else {
 					None
 				}
-			},
-			_ => None
+			}
+			_ => None,
 		}
 	}
 
 	/// Find the offset of the item matching the given key.
 	#[inline]
-	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<Offset, Offset> where K: Borrow<Q>, Q: Ord {
+	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<Offset, Offset>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match binary_search_min(&self.items, key) {
 			Some(i) => {
 				if self.items[i].key().borrow() == key {
 					Ok(i.into())
 				} else {
-					Err((i+1).into())
+					Err((i + 1).into())
 				}
-			},
-			None => Err(0.into())
+			}
+			None => Err(0.into()),
 		}
 	}
 
@@ -111,7 +116,7 @@ impl<K, V> Leaf<K, V> {
 	pub fn item(&self, offset: Offset) -> Option<&Item<K, V>> {
 		match offset.value() {
 			Some(offset) => self.items.get(offset),
-			None => None
+			None => None,
 		}
 	}
 
@@ -119,22 +124,25 @@ impl<K, V> Leaf<K, V> {
 	pub fn item_mut(&mut self, offset: Offset) -> Option<&mut Item<K, V>> {
 		match offset.value() {
 			Some(offset) => self.items.get_mut(offset),
-			None => None
+			None => None,
 		}
 	}
 
 	#[inline]
-	pub fn insert_by_key(&mut self, key: K, mut value: V) -> (Offset, Option<V>) where K: Ord {
+	pub fn insert_by_key(&mut self, key: K, mut value: V) -> (Offset, Option<V>)
+	where
+		K: Ord,
+	{
 		match binary_search_min(&self.items, &key) {
 			Some(i) => {
 				if self.items[i].key() == &key {
 					std::mem::swap(&mut value, self.items[i].value_mut());
 					(i.into(), Some(value))
 				} else {
-					self.items.insert(i+1, Item::new(key, value));
-					((i+1).into(), None)
+					self.items.insert(i + 1, Item::new(key, value));
+					((i + 1).into(), None)
 				}
-			},
+			}
 			None => {
 				self.items.insert(0, Item::new(key, value));
 				(0.into(), None)
@@ -148,12 +156,12 @@ impl<K, V> Leaf<K, V> {
 
 		let median_i = (self.items.len() - 1) / 2;
 
-		let right_items = self.items.drain(median_i+1..).collect();
+		let right_items = self.items.drain(median_i + 1..).collect();
 		let median = self.items.pop().unwrap();
 
 		let right_leaf = Leaf {
 			parent: self.parent,
-			items: right_items
+			items: right_items,
 		};
 
 		assert!(!self.is_underflowing());
@@ -177,7 +185,7 @@ impl<K, V> Leaf<K, V> {
 
 	#[inline]
 	pub fn pop_left(&mut self) -> Result<Item<K, V>, WouldUnderflow> {
-		if self.item_count() < M/2 {
+		if self.item_count() < M / 2 {
 			Err(WouldUnderflow)
 		} else {
 			Ok(self.items.remove(0))
@@ -193,7 +201,7 @@ impl<K, V> Leaf<K, V> {
 
 	#[inline]
 	pub fn pop_right(&mut self) -> Result<(Offset, Item<K, V>), WouldUnderflow> {
-		if self.item_count() < M/2 {
+		if self.item_count() < M / 2 {
 			Err(WouldUnderflow)
 		} else {
 			let offset = self.items.len();
@@ -220,7 +228,7 @@ impl<K, V> Leaf<K, V> {
 
 	#[inline]
 	pub fn is_underflowing(&self) -> bool {
-		self.item_count() < M/2 - 1
+		self.item_count() < M / 2 - 1
 	}
 
 	/// It is assumed that the leaf will not overflow.
@@ -228,7 +236,7 @@ impl<K, V> Leaf<K, V> {
 	pub fn insert(&mut self, offset: Offset, item: Item<K, V>) {
 		match offset.value() {
 			Some(offset) => self.items.insert(offset, item),
-			None => panic!("Offset out of bounds")
+			None => panic!("Offset out of bounds"),
 		}
 	}
 
@@ -238,7 +246,7 @@ impl<K, V> Leaf<K, V> {
 	pub fn remove(&mut self, offset: Offset) -> Item<K, V> {
 		match offset.value() {
 			Some(offset) => self.items.remove(offset),
-			None => panic!("Offset out of bounds")
+			None => panic!("Offset out of bounds"),
 		}
 	}
 
@@ -252,7 +260,11 @@ impl<K, V> Leaf<K, V> {
 	/// Requires the `dot` feature.
 	#[cfg(feature = "dot")]
 	#[inline]
-	pub fn dot_write_label<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+	pub fn dot_write_label<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()>
+	where
+		K: std::fmt::Display,
+		V: std::fmt::Display,
+	{
 		for item in &self.items {
 			write!(f, "{{{}|{}}}|", item.key(), item.value())?;
 		}
@@ -261,16 +273,20 @@ impl<K, V> Leaf<K, V> {
 	}
 
 	#[cfg(debug_assertions)]
-	pub fn validate(&self, parent: Option<usize>, min: Option<&K>, max: Option<&K>) where K: Ord {
+	pub fn validate(&self, parent: Option<usize>, min: Option<&K>, max: Option<&K>)
+	where
+		K: Ord,
+	{
 		if self.parent() != parent {
 			panic!("wrong parent")
 		}
 
-		if min.is_some() || max.is_some() { // not root
+		if min.is_some() || max.is_some() {
+			// not root
 			match self.balance() {
 				Balance::Overflow => panic!("leaf is overflowing"),
 				Balance::Underflow(_) => panic!("leaf is underflowing"),
-				_ => ()
+				_ => (),
 			}
 		}
 

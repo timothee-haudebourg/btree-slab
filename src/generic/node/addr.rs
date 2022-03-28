@@ -1,11 +1,11 @@
-use std::fmt;
 use super::Offset;
+use std::fmt;
 
 /// Item/entry location in a BTreeMap.
 ///
 /// Each item in a B-Tree is addressed by a node identifier and an offset in the node.
 /// We write `@id:offset` the address of the item contained in the node `id` at offset `offset`.
-/// 
+///
 /// ```text
 ///                                   ┌────────────────┐
 ///                                   │ node 0      ┌──┼─── this item address is `@0:1`
@@ -22,13 +22,13 @@ use super::Offset;
 ///               └──┼──────────────┘ └──────────────┼──┘ └─────────────────┘
 ///                  └─ this item address is `@1:0`  └─ this item address is `@2:2`
 /// ```
-/// 
+///
 /// ## Validity
 /// An item adress `addr` is *valid* in a given BTreeMap if it `addr.id` refers to an existing
 /// node and if `addr.offset` is comprised between `-1` and the number of items in the node (included).
 /// We say that `addr` is *occupied* if it points to an actual item
 /// (`addr.offset` at least 0 and less than the number of items in the node).
-/// 
+///
 /// The following diagram shows all the valid address in a B-Tree.
 /// ```text
 ///                                             ┌───────────┐
@@ -48,14 +48,14 @@ use super::Offset;
 /// Note how some valid addresses are outside of nodes bounds.
 /// Even is thoses addresses do not refers to any items,
 /// they can be useful to operate on the tree.
-/// 
+///
 /// ### Back addresses
-/// 
+///
 /// A "back address" is a valid address whose offset is at least `0`.
 /// If `addr.offset` is equal to the number of items in the node then it doesn't actually refer
 /// to an existing item in the node,
 /// but it can be used to insert a new item with `BTreeExt::insert_at`.
-/// 
+///
 /// The following diagram shows all the back addresses in a node.
 /// ```text
 ///                        ┌───────────┄┄┄┄┄───────┐      
@@ -66,12 +66,12 @@ use super::Offset;
 ///                        └───────────┄┄┄┄┄───────┘   
 /// ```
 /// Note that an address with offset `-1` is *not* a back address.
-/// 
+///
 /// ### Front addresses
-/// 
+///
 /// A "front address" is a valid address whose offset is less that the number of items in the node.
 /// If `addr.offset` is equal to `-1`, then it doesn't actually refer to an existing item in the node.
-/// 
+///
 /// The following diagram shows all the front addresses in a node.
 /// ```text
 ///                             ┌───────────┄┄┄┄┄───────┐      
@@ -82,7 +82,7 @@ use super::Offset;
 ///                             └───────────┄┄┄┄┄───────┘   
 /// ```
 /// Note that an address with offset `n` is *not* a front address.
-/// 
+///
 /// ## Safety
 /// It is not safe to use an address `addr` in which `addr.id` is not the identifier of any node
 /// currently used by the tree.
@@ -92,27 +92,25 @@ pub struct Address {
 	pub id: usize,
 
 	/// Offset in the node.
-	pub offset: Offset
+	pub offset: Offset,
 }
 
 impl Address {
 	/// Creates a new address from the identifier of the node and the offset in the node.
 	#[inline]
 	pub fn new(id: usize, offset: Offset) -> Address {
-		Address {
-			id, offset
-		}
+		Address { id, offset }
 	}
 
 	/// Address in the empty tree.
-	/// 
+	///
 	/// This is the unique valid address address in an ampty tree.
 	/// It is only valid in the empty tree.
 	#[inline]
 	pub fn nowhere() -> Address {
 		Address {
 			id: std::usize::MAX,
-			offset: 0.into()
+			offset: 0.into(),
 		}
 	}
 

@@ -1,19 +1,12 @@
 #![feature(nll)]
-use rand::{
-	SeedableRng,
-	seq::SliceRandom,
-	rngs::SmallRng
-};
 use btree_slab::{
-	BTreeMap,
 	generic::{
-		map::{
-			BTreeExt,
-			BTreeExtMut
-		},
-		node::Item
-	}
+		map::{BTreeExt, BTreeExtMut},
+		node::Item,
+	},
+	BTreeMap,
 };
+use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 
 const SEED: &'static [u8; 16] = b"testseedtestseed";
 
@@ -68,8 +61,8 @@ pub fn item_addresses() {
 				assert!(before_addr != addr);
 				let addr_again = btree.next_item_address(before_addr).unwrap();
 				assert_eq!(addr_again, addr)
-			},
-			None => ()
+			}
+			None => (),
 		}
 
 		match btree.next_item_address(addr) {
@@ -77,8 +70,8 @@ pub fn item_addresses() {
 				assert!(after_addr != addr);
 				let addr_again = btree.previous_item_address(after_addr).unwrap();
 				assert_eq!(addr_again, addr)
-			},
-			None => ()
+			}
+			None => (),
 		}
 	}
 }
@@ -141,8 +134,8 @@ pub fn remove_addresses() {
 					let (_, addr) = btree.remove_at(addr).unwrap();
 					btree.insert_at(addr, Item::new(*key, *value));
 					btree.validate();
-				},
-				Err(_) => break
+				}
+				Err(_) => break,
 			}
 		}
 	}
@@ -159,19 +152,15 @@ pub fn update() {
 	}
 
 	for (key, value) in &ITEMS {
-		btree.update(*key, |current_value| {
-			match current_value {
-				Some(current_value) => {
-					if current_value % 2 == 0 {
-						(None, ())
-					} else {
-						(Some(10000 - *value), ())
-					}
-				},
-				None => {
-					(Some(*value), ())
+		btree.update(*key, |current_value| match current_value {
+			Some(current_value) => {
+				if current_value % 2 == 0 {
+					(None, ())
+				} else {
+					(Some(10000 - *value), ())
 				}
 			}
+			None => (Some(*value), ()),
 		});
 
 		btree.validate();
@@ -191,7 +180,7 @@ pub fn update() {
 				} else {
 					assert_eq!(*current_value, *value)
 				}
-			},
+			}
 			None => {
 				if shoud_be_present {
 					panic!("binding {}:{} should be present", *key, *value);
@@ -301,5 +290,5 @@ const ITEMS: [(usize, usize); 100] = [
 	(3931, 6743),
 	(2575, 6810),
 	(1553, 5964),
-	(4493, 3677)
+	(4493, 3677),
 ];

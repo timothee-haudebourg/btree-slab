@@ -1,21 +1,17 @@
-use std::{
-	borrow::Borrow,
-	cmp::Ordering,
-	fmt
-};
+use std::{borrow::Borrow, cmp::Ordering, fmt};
 
-mod item;
 mod addr;
-mod leaf;
 pub mod internal;
+mod item;
+mod leaf;
 
-pub use item::Item;
 pub use addr::Address;
-pub use leaf::Leaf as LeafNode;
 pub use internal::Internal as InternalNode;
+pub use item::Item;
+pub use leaf::Leaf as LeafNode;
 
 /// Type identifier by a key.
-/// 
+///
 /// This is implemented by [`Item`] and [`internal::Branch`].
 pub trait Keyed {
 	type Key;
@@ -153,13 +149,19 @@ pub enum Balance {
 	Overflow,
 
 	/// The node is underflowing.
-	/// 
+	///
 	/// The boolean is `true` if the node is empty.
-	Underflow(bool)
+	Underflow(bool),
 }
 
 /// Error returned when an operation on the node would result in an underflow.
 pub struct WouldUnderflow;
+
+/// Type of the value returned by `Node::pop_right`.
+/// 
+/// It includes the offset of the popped item, the item itself and the index of
+/// the right child of the item if it is removed from an internal node.
+pub type PoppedItem<K, V> = (Offset, Item<K, V>, Option<usize>);
 
 /// B-tree node.
 #[derive(Clone)]
@@ -168,12 +170,17 @@ pub enum Node<K, V> {
 	Internal(InternalNode<K, V>),
 
 	/// Leaf node.
-	Leaf(LeafNode<K, V>)
+	Leaf(LeafNode<K, V>),
 }
 
 impl<K, V> Node<K, V> {
 	#[inline]
-	pub fn binary(parent: Option<usize>, left_id: usize, median: Item<K, V>, right_id: usize) -> Node<K, V> {
+	pub fn binary(
+		parent: Option<usize>,
+		left_id: usize,
+		median: Item<K, V>,
+		right_id: usize,
+	) -> Node<K, V> {
 		Node::Internal(InternalNode::binary(parent, left_id, median, right_id))
 	}
 
@@ -186,7 +193,7 @@ impl<K, V> Node<K, V> {
 	pub fn balance(&self) -> Balance {
 		match self {
 			Node::Internal(node) => node.balance(),
-			Node::Leaf(leaf) => leaf.balance()
+			Node::Leaf(leaf) => leaf.balance(),
 		}
 	}
 
@@ -194,7 +201,7 @@ impl<K, V> Node<K, V> {
 	pub fn is_underflowing(&self) -> bool {
 		match self {
 			Node::Internal(node) => node.is_underflowing(),
-			Node::Leaf(leaf) => leaf.is_underflowing()
+			Node::Leaf(leaf) => leaf.is_underflowing(),
 		}
 	}
 
@@ -202,7 +209,7 @@ impl<K, V> Node<K, V> {
 	pub fn is_overflowing(&self) -> bool {
 		match self {
 			Node::Internal(node) => node.is_overflowing(),
-			Node::Leaf(leaf) => leaf.is_overflowing()
+			Node::Leaf(leaf) => leaf.is_overflowing(),
 		}
 	}
 
@@ -210,7 +217,7 @@ impl<K, V> Node<K, V> {
 	pub fn parent(&self) -> Option<usize> {
 		match self {
 			Node::Internal(node) => node.parent(),
-			Node::Leaf(leaf) => leaf.parent()
+			Node::Leaf(leaf) => leaf.parent(),
 		}
 	}
 
@@ -218,7 +225,7 @@ impl<K, V> Node<K, V> {
 	pub fn set_parent(&mut self, p: Option<usize>) {
 		match self {
 			Node::Internal(node) => node.set_parent(p),
-			Node::Leaf(leaf) => leaf.set_parent(p)
+			Node::Leaf(leaf) => leaf.set_parent(p),
 		}
 	}
 
@@ -226,7 +233,7 @@ impl<K, V> Node<K, V> {
 	pub fn item_count(&self) -> usize {
 		match self {
 			Node::Internal(node) => node.item_count(),
-			Node::Leaf(leaf) => leaf.item_count()
+			Node::Leaf(leaf) => leaf.item_count(),
 		}
 	}
 
@@ -234,7 +241,7 @@ impl<K, V> Node<K, V> {
 	pub fn child_count(&self) -> usize {
 		match self {
 			Node::Internal(node) => node.child_count(),
-			Node::Leaf(_) => 0
+			Node::Leaf(_) => 0,
 		}
 	}
 
@@ -242,7 +249,7 @@ impl<K, V> Node<K, V> {
 	pub fn child_index(&self, id: usize) -> Option<usize> {
 		match self {
 			Node::Internal(node) => node.child_index(id),
-			_ => None
+			_ => None,
 		}
 	}
 
@@ -250,7 +257,7 @@ impl<K, V> Node<K, V> {
 	pub fn child_id(&self, index: usize) -> usize {
 		match self {
 			Node::Internal(node) => node.child_id(index),
-			_ => panic!("only internal nodes can be indexed")
+			_ => panic!("only internal nodes can be indexed"),
 		}
 	}
 
@@ -258,29 +265,37 @@ impl<K, V> Node<K, V> {
 	pub fn child_id_opt(&self, index: usize) -> Option<usize> {
 		match self {
 			Node::Internal(node) => node.child_id_opt(index),
-			Node::Leaf(_) => None
+			Node::Leaf(_) => None,
 		}
 	}
 
 	#[inline]
-	pub fn get<Q: ?Sized>(&self, key: &Q) -> Result<Option<&V>, usize> where K: Borrow<Q>, Q: Ord {
+	pub fn get<Q: ?Sized>(&self, key: &Q) -> Result<Option<&V>, usize>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match self {
 			Node::Leaf(leaf) => Ok(leaf.get(key)),
 			Node::Internal(node) => match node.get(key) {
 				Ok(value) => Ok(Some(value)),
-				Err(e) => Err(e)
-			}
+				Err(e) => Err(e),
+			},
 		}
 	}
 
 	#[inline]
-	pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Result<Option<&mut V>, usize> where K: Borrow<Q>, Q: Ord {
+	pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Result<Option<&mut V>, usize>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match self {
 			Node::Leaf(leaf) => Ok(leaf.get_mut(key)),
 			Node::Internal(node) => match node.get_mut(key) {
 				Ok(value) => Ok(Some(value)),
-				Err(e) => Err(e)
-			}
+				Err(e) => Err(e),
+			},
 		}
 	}
 
@@ -290,16 +305,20 @@ impl<K, V> Node<K, V> {
 	/// this funtion returns the index and id of the child that may match the key,
 	/// or `Err(None)` if it is a leaf.
 	#[inline]
-	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<Offset, (usize, Option<usize>)> where K: Borrow<Q>, Q: Ord {
+	pub fn offset_of<Q: ?Sized>(&self, key: &Q) -> Result<Offset, (usize, Option<usize>)>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match self {
 			Node::Internal(node) => match node.offset_of(key) {
 				Ok(i) => Ok(i),
-				Err((index, child_id)) => Err((index, Some(child_id)))
+				Err((index, child_id)) => Err((index, Some(child_id))),
 			},
 			Node::Leaf(leaf) => match leaf.offset_of(key) {
 				Ok(i) => Ok(i),
-				Err(index) =>  Err((index.unwrap(), None))
-			}
+				Err(index) => Err((index.unwrap(), None)),
+			},
 		}
 	}
 
@@ -307,7 +326,7 @@ impl<K, V> Node<K, V> {
 	pub fn item(&self, offset: Offset) -> Option<&Item<K, V>> {
 		match self {
 			Node::Internal(node) => node.item(offset),
-			Node::Leaf(leaf) => leaf.item(offset)
+			Node::Leaf(leaf) => leaf.item(offset),
 		}
 	}
 
@@ -315,7 +334,7 @@ impl<K, V> Node<K, V> {
 	pub fn item_mut(&mut self, offset: Offset) -> Option<&mut Item<K, V>> {
 		match self {
 			Node::Internal(node) => node.item_mut(offset),
-			Node::Leaf(leaf) => leaf.item_mut(offset)
+			Node::Leaf(leaf) => leaf.item_mut(offset),
 		}
 	}
 
@@ -324,13 +343,20 @@ impl<K, V> Node<K, V> {
 	/// It is assumed that the node is not free.
 	/// If it is a leaf node, there must be a free space in it for the inserted value.
 	#[inline]
-	pub fn insert_by_key(&mut self, key: K, value: V) -> Result<(Offset, Option<V>), (K, V, usize, usize)> where K: Ord {
+	pub fn insert_by_key(
+		&mut self,
+		key: K,
+		value: V,
+	) -> Result<(Offset, Option<V>), internal::InsertionError<K, V>>
+	where
+		K: Ord,
+	{
 		match self {
 			Node::Internal(node) => match node.insert_by_key(key, value) {
 				Ok((offset, value)) => Ok((offset, Some(value))),
-				Err(e) => Err(e)
+				Err(e) => Err(e),
 			},
-			Node::Leaf(leaf) => Ok(leaf.insert_by_key(key, value))
+			Node::Leaf(leaf) => Ok(leaf.insert_by_key(key, value)),
 		}
 	}
 
@@ -342,7 +368,7 @@ impl<K, V> Node<K, V> {
 			Node::Internal(node) => {
 				let (len, item, right_node) = node.split();
 				(len, item, Node::Internal(right_node))
-			},
+			}
 			Node::Leaf(leaf) => {
 				let (len, item, right_leaf) = leaf.split();
 				(len, item, Node::Leaf(right_leaf))
@@ -351,10 +377,14 @@ impl<K, V> Node<K, V> {
 	}
 
 	#[inline]
-	pub fn merge(&mut self, left_index: usize, right_index: usize) -> (usize, usize, usize, Item<K, V>, Balance) {
+	pub fn merge(
+		&mut self,
+		left_index: usize,
+		right_index: usize,
+	) -> (usize, usize, usize, Item<K, V>, Balance) {
 		match self {
 			Node::Internal(node) => node.merge(left_index, right_index),
-			_ => panic!("only internal nodes can merge children")
+			_ => panic!("only internal nodes can merge children"),
 		}
 	}
 
@@ -364,7 +394,7 @@ impl<K, V> Node<K, V> {
 		match (self, other) {
 			(Node::Internal(node), Node::Internal(other)) => node.append(separator, other),
 			(Node::Leaf(leaf), Node::Leaf(other)) => leaf.append(separator, other),
-			_ => panic!("incompatibles nodes")
+			_ => panic!("incompatibles nodes"),
 		}
 	}
 
@@ -372,7 +402,7 @@ impl<K, V> Node<K, V> {
 	pub fn push_left(&mut self, item: Item<K, V>, opt_child_id: Option<usize>) {
 		match self {
 			Node::Internal(node) => node.push_left(item, opt_child_id.unwrap()),
-			Node::Leaf(leaf) => leaf.push_left(item)
+			Node::Leaf(leaf) => leaf.push_left(item),
 		}
 	}
 
@@ -382,8 +412,8 @@ impl<K, V> Node<K, V> {
 			Node::Internal(node) => {
 				let (item, child_id) = node.pop_left()?;
 				Ok((item, Some(child_id)))
-			},
-			Node::Leaf(leaf) => Ok((leaf.pop_left()?, None))
+			}
+			Node::Leaf(leaf) => Ok((leaf.pop_left()?, None)),
 		}
 	}
 
@@ -391,17 +421,17 @@ impl<K, V> Node<K, V> {
 	pub fn push_right(&mut self, item: Item<K, V>, opt_child_id: Option<usize>) -> Offset {
 		match self {
 			Node::Internal(node) => node.push_right(item, opt_child_id.unwrap()),
-			Node::Leaf(leaf) => leaf.push_right(item)
+			Node::Leaf(leaf) => leaf.push_right(item),
 		}
 	}
 
 	#[inline]
-	pub fn pop_right(&mut self) -> Result<(Offset, Item<K, V>, Option<usize>), WouldUnderflow> {
+	pub fn pop_right(&mut self) -> Result<PoppedItem<K, V>, WouldUnderflow> {
 		match self {
 			Node::Internal(node) => {
 				let (offset, item, child_id) = node.pop_right()?;
 				Ok((offset, item, Some(child_id)))
-			},
+			}
 			Node::Leaf(leaf) => {
 				let (offset, item) = leaf.pop_right()?;
 				Ok((offset, item, None))
@@ -419,7 +449,7 @@ impl<K, V> Node<K, V> {
 				} else {
 					None
 				}
-			},
+			}
 			Node::Leaf(leaf) => {
 				if offset < leaf.item_count() {
 					Some(Ok(leaf.remove(offset)))
@@ -430,15 +460,6 @@ impl<K, V> Node<K, V> {
 		}
 	}
 
-	/// Remove the item at the given offset.
-	#[inline]
-	pub fn remove(&mut self, offset: Offset) -> Result<Item<K, V>, (usize, Item<K, V>, usize)> {
-		match self {
-			Node::Internal(node) => Err(node.remove(offset)),
-			Node::Leaf(leaf) => Ok(leaf.remove(offset))
-		}
-	}
-
 	#[inline]
 	pub fn remove_rightmost_leaf(&mut self) -> Result<Item<K, V>, usize> {
 		match self {
@@ -446,8 +467,8 @@ impl<K, V> Node<K, V> {
 				let child_index = node.child_count() - 1;
 				let child_id = node.child_id(child_index);
 				Err(child_id)
-			},
-			Node::Leaf(leaf) => Ok(leaf.remove_last())
+			}
+			Node::Leaf(leaf) => Ok(leaf.remove_last()),
 		}
 	}
 
@@ -458,7 +479,7 @@ impl<K, V> Node<K, V> {
 	pub fn insert(&mut self, offset: Offset, item: Item<K, V>, opt_right_child_id: Option<usize>) {
 		match self {
 			Node::Internal(node) => node.insert(offset, item, opt_right_child_id.unwrap()),
-			Node::Leaf(leaf) => leaf.insert(offset, item)
+			Node::Leaf(leaf) => leaf.insert(offset, item),
 		}
 	}
 
@@ -466,7 +487,7 @@ impl<K, V> Node<K, V> {
 	pub fn replace(&mut self, offset: Offset, item: Item<K, V>) -> Item<K, V> {
 		match self {
 			Node::Internal(node) => node.replace(offset, item),
-			_ => panic!("can only replace in internal nodes")
+			_ => panic!("can only replace in internal nodes"),
 		}
 	}
 
@@ -474,7 +495,7 @@ impl<K, V> Node<K, V> {
 	pub fn separators(&self, i: usize) -> (Option<&K>, Option<&K>) {
 		match self {
 			Node::Leaf(_) => (None, None),
-			Node::Internal(node) => node.separators(i)
+			Node::Internal(node) => node.separators(i),
 		}
 	}
 
@@ -482,7 +503,7 @@ impl<K, V> Node<K, V> {
 	pub fn children(&self) -> Children<K, V> {
 		match self {
 			Node::Leaf(_) => Children::Leaf,
-			Node::Internal(node) => node.children()
+			Node::Internal(node) => node.children(),
 		}
 	}
 
@@ -490,7 +511,7 @@ impl<K, V> Node<K, V> {
 	pub fn children_with_separators(&self) -> ChildrenWithSeparators<K, V> {
 		match self {
 			Node::Leaf(_) => ChildrenWithSeparators::Leaf,
-			Node::Internal(node) => node.children_with_separators()
+			Node::Internal(node) => node.children_with_separators(),
 		}
 	}
 
@@ -499,25 +520,32 @@ impl<K, V> Node<K, V> {
 	/// Requires the `dot` feature.
 	#[cfg(feature = "dot")]
 	#[inline]
-	pub fn dot_write_label<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+	pub fn dot_write_label<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()>
+	where
+		K: std::fmt::Display,
+		V: std::fmt::Display,
+	{
 		match self {
 			Node::Leaf(leaf) => leaf.dot_write_label(f),
-			Node::Internal(node) => node.dot_write_label(f)
+			Node::Internal(node) => node.dot_write_label(f),
 		}
 	}
 
 	#[cfg(debug_assertions)]
-	pub fn validate(&self, parent: Option<usize>, min: Option<&K>, max: Option<&K>) where K: Ord {
+	pub fn validate(&self, parent: Option<usize>, min: Option<&K>, max: Option<&K>)
+	where
+		K: Ord,
+	{
 		match self {
 			Node::Leaf(leaf) => leaf.validate(parent, min, max),
-			Node::Internal(node) => node.validate(parent, min, max)
+			Node::Internal(node) => node.validate(parent, min, max),
 		}
 	}
 }
 
 pub enum Children<'a, K, V> {
 	Leaf,
-	Internal(Option<usize>, std::slice::Iter<'a, internal::Branch<K, V>>)
+	Internal(Option<usize>, std::slice::Iter<'a, internal::Branch<K, V>>),
 }
 
 impl<'a, K, V> Iterator for Children<'a, K, V> {
@@ -527,24 +555,21 @@ impl<'a, K, V> Iterator for Children<'a, K, V> {
 	fn next(&mut self) -> Option<usize> {
 		match self {
 			Children::Leaf => None,
-			Children::Internal(first, rest) => {
-				match first.take() {
-					Some(child) => Some(child),
-					None => {
-						match rest.next() {
-							Some(branch) => Some(branch.child),
-							None => None
-						}
-					}
-				}
-			}
+			Children::Internal(first, rest) => match first.take() {
+				Some(child) => Some(child),
+				None => rest.next().map(|branch| branch.child),
+			},
 		}
 	}
 }
 
 pub enum ChildrenWithSeparators<'a, K, V> {
 	Leaf,
-	Internal(Option<usize>, Option<&'a Item<K, V>>, std::iter::Peekable<std::slice::Iter<'a, internal::Branch<K, V>>>)
+	Internal(
+		Option<usize>,
+		Option<&'a Item<K, V>>,
+		std::iter::Peekable<std::slice::Iter<'a, internal::Branch<K, V>>>,
+	),
 }
 
 impl<'a, K, V> Iterator for ChildrenWithSeparators<'a, K, V> {
@@ -554,32 +579,22 @@ impl<'a, K, V> Iterator for ChildrenWithSeparators<'a, K, V> {
 	fn next(&mut self) -> Option<Self::Item> {
 		match self {
 			ChildrenWithSeparators::Leaf => None,
-			ChildrenWithSeparators::Internal(first, left_sep, rest) => {
-				match first.take() {
-					Some(child) => {
-						let right_sep = match rest.peek() {
-							Some(right) => Some(&right.item),
-							None => None
-						};
-						*left_sep = right_sep;
-						Some((None, child, right_sep))
-					},
-					None => {
-						match rest.next() {
-							Some(branch) => {
-								let right_sep = match rest.peek() {
-									Some(right) => Some(&right.item),
-									None => None
-								};
-								let result = Some((*left_sep, branch.child, right_sep));
-								*left_sep = right_sep;
-								result
-							},
-							None => None
-						}
-					}
+			ChildrenWithSeparators::Internal(first, left_sep, rest) => match first.take() {
+				Some(child) => {
+					let right_sep = rest.peek().map(|right| &right.item);
+					*left_sep = right_sep;
+					Some((None, child, right_sep))
 				}
-			}
+				None => match rest.next() {
+					Some(branch) => {
+						let right_sep = rest.peek().map(|right| &right.item);
+						let result = Some((*left_sep, branch.child, right_sep));
+						*left_sep = right_sep;
+						result
+					}
+					None => None,
+				},
+			},
 		}
 	}
 }

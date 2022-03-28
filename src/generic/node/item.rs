@@ -1,8 +1,5 @@
-use std::{
-	mem::MaybeUninit,
-	cmp::Ordering
-};
 use super::Keyed;
+use std::{cmp::Ordering, mem::MaybeUninit};
 
 pub struct Item<K, V> {
 	/// # Safety
@@ -13,13 +10,16 @@ pub struct Item<K, V> {
 	/// # Safety
 	///
 	/// This field must always be initialized when the item is accessed and/or dropped.
-	value: MaybeUninit<V>
+	value: MaybeUninit<V>,
 }
 
 impl<K: Clone, V: Clone> Clone for Item<K, V> {
 	fn clone(&self) -> Self {
 		unsafe {
-			Self::new(self.key.assume_init_ref().clone(), self.value.assume_init_ref().clone())
+			Self::new(
+				self.key.assume_init_ref().clone(),
+				self.value.assume_init_ref().clone(),
+			)
 		}
 	}
 }
@@ -34,7 +34,7 @@ impl<K, V> Item<K, V> {
 	pub fn new(key: K, value: V) -> Item<K, V> {
 		Item {
 			key: MaybeUninit::new(key),
-			value: MaybeUninit::new(value)
+			value: MaybeUninit::new(value),
 		}
 	}
 
@@ -85,7 +85,7 @@ impl<K, V> Item<K, V> {
 	}
 
 	#[inline]
-	pub unsafe fn maybe_uninit_value_mut(&mut self) -> &mut MaybeUninit<V> {
+	pub fn maybe_uninit_value_mut(&mut self) -> &mut MaybeUninit<V> {
 		&mut self.value
 	}
 
@@ -120,12 +120,14 @@ impl<K, V> Item<K, V> {
 	#[inline]
 	pub fn into_pair(self) -> (K, V) {
 		let (key, value) = self.into_inner();
-		unsafe {
-			(key.assume_init(), value.assume_init())
-		}
+		unsafe { (key.assume_init(), value.assume_init()) }
 	}
 
 	/// Drop the key but not the value which is assumed uninitialized.
+	/// 
+	/// # Safety
+	/// 
+	/// The value must be uninitialized.
 	#[inline]
 	pub unsafe fn forget_value(self) {
 		let (key, value) = self.into_inner();

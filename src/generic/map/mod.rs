@@ -1,44 +1,19 @@
+use crate::generic::node::{Address, Balance, Item, Node, WouldUnderflow};
+use cc_traits::{Slab, SlabMut};
 use std::{
 	borrow::Borrow,
-	marker::PhantomData,
-	ops::{
-		Index,
-		Bound,
-		RangeBounds
-	},
 	cmp::Ordering,
-	hash::{
-		Hash,
-		Hasher
-	},
-	iter::{
-		FromIterator,
-		FusedIterator,
-		ExactSizeIterator,
-		DoubleEndedIterator
-	}
-};
-use cc_traits::{
-	Slab,
-	SlabMut
-};
-use crate::{
-	generic::{
-		node::{
-			Item,
-			Address,
-			Node,
-			Balance,
-			WouldUnderflow
-		}
-	}
+	hash::{Hash, Hasher},
+	iter::{DoubleEndedIterator, ExactSizeIterator, FromIterator, FusedIterator},
+	marker::PhantomData,
+	ops::{Bound, Index, RangeBounds},
 };
 
-mod ext;
 mod entry;
+mod ext;
 
-pub use ext::*;
 pub use entry::*;
+pub use ext::*;
 
 /// Knuth order of the B-Trees.
 ///
@@ -53,7 +28,7 @@ pub const M: usize = 8;
 /// efficiently.
 ///
 /// # Basic usage
-/// 
+///
 /// Basic usage is similar to the map data structures offered by the standard library.
 /// ```
 /// use btree_slab::BTreeMap;
@@ -94,11 +69,11 @@ pub const M: usize = 8;
 ///     println!("{}: \"{}\"", movie, review);
 /// }
 /// ```
-/// 
+///
 /// # Advanced usage
 ///
 /// ## Entry API
-/// 
+///
 /// This crate also reproduces the Entry API defined by the standard library,
 /// which allows for more complex methods of getting, setting, updating and removing keys and
 /// their values:
@@ -128,14 +103,14 @@ pub const M: usize = 8;
 /// ```
 ///
 /// ## Mutable iterators
-/// 
+///
 /// This type provides two iterators providing mutable references to the entries:
 ///   - [`IterMut`] is a double-ended iterator following the standard
 ///     [`std::collections::btree_map::IterMut`] implementation.
 ///   - [`EntriesMut`] is a single-ended iterator that allows, in addition,
 ///     insertion and deletion of entries at the current iterator's position in the map.
 ///     An example is given below.
-/// 
+///
 /// ```
 /// use btree_slab::BTreeMap;
 ///
@@ -148,31 +123,31 @@ pub const M: usize = 8;
 /// entries.next();
 /// entries.next();
 /// entries.insert("c", 3); // the inserted key must preserve the order of the map.
-/// 
+///
 /// let entries: Vec<_> = map.into_iter().collect();
 /// assert_eq!(entries, vec![("a", 1), ("b", 2), ("c", 3), ("d", 4)]);
 /// ```
 ///
 /// ## Custom allocation
-/// 
+///
 /// This data structure is built on top of a slab data structure,
 /// but is agnostic of the actual slab implementation which is taken as parameter (`C`).
 /// If the `slab` feature is enabled,
 /// the [`slab::Slab`] implementation is used by default by reexporting
 /// `BTreeMap<K, V, slab::Slab<_>>` at the root of the crate.
 /// Any container implementing "slab-like" functionalities can be used.
-/// 
+///
 /// ## Extended API
-/// 
+///
 /// This crate provides the two traits [`BTreeExt`] and [`BTreeExtMut`] that can be imported to
 /// expose low-level operations on [`BTreeMap`].
 /// The extended API allows the caller to directly navigate and access the entries of the tree
 /// using their [`Address`].
 /// These functions are not intended to be directly called by the users,
 /// but can be used to extend the data structure with new functionalities.
-/// 
+///
 /// # Correctness
-/// 
+///
 /// It is a logic error for a key to be modified in such a way that the key's ordering relative
 /// to any other key, as determined by the [`Ord`] trait, changes while it is in the map.
 /// This is normally only possible through [`Cell`](`std::cell::Cell`),
@@ -189,20 +164,22 @@ pub struct BTreeMap<K, V, C> {
 	len: usize,
 
 	k: PhantomData<K>,
-	v: PhantomData<V>
+	v: PhantomData<V>,
 }
 
 impl<K, V, C> BTreeMap<K, V, C> {
 	/// Create a new empty B-tree.
 	#[inline]
-	pub fn new() -> BTreeMap<K, V, C> where C: Default {
-		assert!(M >= 4);
+	pub fn new() -> BTreeMap<K, V, C>
+	where
+		C: Default,
+	{
 		BTreeMap {
 			nodes: Default::default(),
 			root: None,
 			len: 0,
 			k: PhantomData,
-			v: PhantomData
+			v: PhantomData,
 		}
 	}
 
@@ -258,10 +235,14 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// assert_eq!(map.get_key_value(&2), None);
 	/// ```
 	#[inline]
-	pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V> where K: Borrow<Q>, Q: Ord {
+	pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match self.root {
 			Some(id) => self.get_in(key, id),
-			None => None
+			None => None,
 		}
 	}
 
@@ -290,8 +271,8 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 			Ok(addr) => {
 				let item = self.item(addr).unwrap();
 				Some((item.key(), item.value()))
-			},
-			Err(_) => None
+			}
+			Err(_) => None,
 		}
 	}
 
@@ -315,8 +296,8 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 			Some(addr) => {
 				let item = self.item(addr).unwrap();
 				Some((item.key(), item.value()))
-			},
-			None => None
+			}
+			None => None,
 		}
 	}
 
@@ -341,8 +322,8 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 			Some(addr) => {
 				let item = self.item(addr).unwrap();
 				Some((item.key(), item.value()))
-			},
-			None => None
+			}
+			None => None,
 		}
 	}
 
@@ -460,7 +441,11 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// assert_eq!(map.contains_key(&2), false);
 	/// ```
 	#[inline]
-	pub fn contains_key<Q: ?Sized>(&self, key: &Q) -> bool where K: Borrow<Q>, Q: Ord {
+	pub fn contains_key<Q: ?Sized>(&self, key: &Q) -> bool
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		self.get(key).is_some()
 	}
 
@@ -469,11 +454,15 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Requires the `dot` feature.
 	#[cfg(feature = "dot")]
 	#[inline]
-	pub fn dot_write<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+	pub fn dot_write<W: std::io::Write>(&self, f: &mut W) -> std::io::Result<()>
+	where
+		K: std::fmt::Display,
+		V: std::fmt::Display,
+	{
 		write!(f, "digraph tree {{\n\tnode [shape=record];\n")?;
 		match self.root {
 			Some(id) => self.dot_write_node(f, id)?,
-			None => ()
+			None => (),
 		}
 		write!(f, "}}")
 	}
@@ -483,7 +472,11 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Requires the `dot` feature.
 	#[cfg(feature = "dot")]
 	#[inline]
-	fn dot_write_node<W: std::io::Write>(&self, f: &mut W, id: usize) -> std::io::Result<()> where K: std::fmt::Display, V: std::fmt::Display {
+	fn dot_write_node<W: std::io::Write>(&self, f: &mut W, id: usize) -> std::io::Result<()>
+	where
+		K: std::fmt::Display,
+		V: std::fmt::Display,
+	{
 		let name = format!("n{}", id);
 		let node = self.node(id);
 
@@ -493,12 +486,12 @@ impl<K, V, C: Slab<Node<K, V>>> BTreeMap<K, V, C> {
 		}
 
 		node.dot_write_label(f)?;
-		write!(f, "({})\"];\n", id)?;
+		writeln!(f, "({})\"];", id)?;
 
 		for child_id in node.children() {
 			self.dot_write_node(f, child_id)?;
 			let child_name = format!("n{}", child_id);
-			write!(f, "\t{} -> {}\n", name, child_name)?;
+			writeln!(f, "\t{} -> {}", name, child_name)?;
 		}
 
 		Ok(())
@@ -519,7 +512,10 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// assert!(a.is_empty());
 	/// ```
 	#[inline]
-	pub fn clear(&mut self) where C: cc_traits::Clear {
+	pub fn clear(&mut self)
+	where
+		C: cc_traits::Clear,
+	{
 		self.root = None;
 		self.len = 0;
 		self.nodes.clear()
@@ -543,10 +539,13 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// assert_eq!(map[&1], "b");
 	/// ```
 	#[inline]
-	pub fn get_mut(&mut self, key: &K) -> Option<&mut V> where K: Ord {
+	pub fn get_mut(&mut self, key: &K) -> Option<&mut V>
+	where
+		K: Ord,
+	{
 		match self.root {
 			Some(id) => self.get_mut_in(key, id),
-			None => None
+			None => None,
 		}
 	}
 
@@ -570,21 +569,17 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// assert_eq!(letters.get(&'y'), None);
 	/// ```
 	#[inline]
-	pub fn entry(&mut self, key: K) -> Entry<K, V, C> where K: Ord {
+	pub fn entry(&mut self, key: K) -> Entry<K, V, C>
+	where
+		K: Ord,
+	{
 		match self.address_of(&key) {
-			Ok(addr) => {
-				Entry::Occupied(OccupiedEntry {
-					map: self,
-					addr
-				})
-			},
-			Err(addr) => {
-				Entry::Vacant(VacantEntry {
-					map: self,
-					key,
-					addr
-				})
-			}
+			Ok(addr) => Entry::Occupied(OccupiedEntry { map: self, addr }),
+			Err(addr) => Entry::Vacant(VacantEntry {
+				map: self,
+				key,
+				addr,
+			}),
 		}
 	}
 
@@ -609,15 +604,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// ```
 	#[inline]
 	pub fn first_entry(&mut self) -> Option<OccupiedEntry<K, V, C>> {
-		match self.first_item_address() {
-			Some(addr) => {
-				Some(OccupiedEntry {
-					map: self,
-					addr
-				})
-			},
-			None => None
-		}
+		self.first_item_address().map(move |addr| OccupiedEntry { map: self, addr })
 	}
 
 	/// Returns the last entry in the map for in-place manipulation.
@@ -641,24 +628,17 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// ```
 	#[inline]
 	pub fn last_entry(&mut self) -> Option<OccupiedEntry<K, V, C>> {
-		match self.last_item_address() {
-			Some(addr) => {
-				Some(OccupiedEntry {
-					map: self,
-					addr
-				})
-			},
-			None => None
-		}
+		self.last_item_address().map(move |addr| OccupiedEntry { map: self, addr })
 	}
 
 	/// Insert a key-value pair in the tree.
 	#[inline]
-	pub fn insert(&mut self, key: K, value: V) -> Option<V> where K: Ord {
+	pub fn insert(&mut self, key: K, value: V) -> Option<V>
+	where
+		K: Ord,
+	{
 		match self.address_of(&key) {
-			Ok(addr) => {
-				Some(self.replace_value_at(addr, value))
-			},
+			Ok(addr) => Some(self.replace_value_at(addr, value)),
 			Err(addr) => {
 				self.insert_exactly_at(addr, Item::new(key, value), None);
 				None
@@ -668,11 +648,12 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 
 	/// Replace a key-value pair in the tree.
 	#[inline]
-	pub fn replace(&mut self, key: K, value: V) -> Option<(K, V)> where K: Ord {
+	pub fn replace(&mut self, key: K, value: V) -> Option<(K, V)>
+	where
+		K: Ord,
+	{
 		match self.address_of(&key) {
-			Ok(addr) => {
-				Some(self.replace_at(addr, key, value))
-			},
+			Ok(addr) => Some(self.replace_at(addr, key, value)),
 			Err(addr) => {
 				self.insert_exactly_at(addr, Item::new(key, value), None);
 				None
@@ -743,13 +724,17 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// assert_eq!(map.remove(&1), None);
 	/// ```
 	#[inline]
-	pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V> where K: Borrow<Q>, Q: Ord {
+	pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match self.address_of(key) {
 			Ok(addr) => {
 				let (item, _) = self.remove_at(addr).unwrap();
 				Some(item.into_value())
-			},
-			Err(_) => None
+			}
+			Err(_) => None,
 		}
 	}
 
@@ -772,25 +757,33 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// assert_eq!(map.remove_entry(&1), None);
 	/// ```
 	#[inline]
-	pub fn remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)> where K: Borrow<Q>, Q: Ord {
+	pub fn remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match self.address_of(key) {
 			Ok(addr) => {
 				let (item, _) = self.remove_at(addr).unwrap();
 				Some(item.into_pair())
-			},
-			Err(_) => None
+			}
+			Err(_) => None,
 		}
 	}
 
 	/// Removes and returns the binding in the map, if any, of which key matches the given one.
 	#[inline]
-	pub fn take<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)> where K: Borrow<Q>, Q: Ord {
+	pub fn take<Q: ?Sized>(&mut self, key: &Q) -> Option<(K, V)>
+	where
+		K: Borrow<Q>,
+		Q: Ord,
+	{
 		match self.address_of(key) {
 			Ok(addr) => {
 				let (item, _) = self.remove_at(addr).unwrap();
 				Some(item.into_pair())
-			},
-			Err(_) => None
+			}
+			Err(_) => None,
 		}
 	}
 
@@ -808,7 +801,11 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// (if it is `None` any previous binding is removed) and
 	/// `result` is the value returned by the entire `update` function call.
 	#[inline]
-	pub fn update<T, F>(&mut self, key: K, action: F) -> T where K: Ord, F: FnOnce(Option<V>) -> (Option<V>, T) {
+	pub fn update<T, F>(&mut self, key: K, action: F) -> T
+	where
+		K: Ord,
+		F: FnOnce(Option<V>) -> (Option<V>, T),
+	{
 		match self.root {
 			Some(id) => self.update_in(id, key, action),
 			None => {
@@ -850,9 +847,9 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	}
 
 	/// Gets a mutable iterator over the entries of the map, sorted by key, that allows insertion and deletion of the iterated entries.
-	/// 
+	///
 	/// # Correctness
-	/// 
+	///
 	/// It is safe to insert any key-value pair while iterating,
 	/// however this might break the well-formedness
 	/// of the underlying tree, which relies on several invariants.
@@ -877,7 +874,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// entries.next();
 	/// entries.next();
 	/// entries.insert("c", 3);
-	/// 
+	///
 	/// let entries: Vec<_> = map.into_iter().collect();
 	/// assert_eq!(entries, vec![("a", 1), ("b", 2), ("c", 3), ("d", 4)]);
 	/// ```
@@ -945,7 +942,9 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// ```
 	#[inline]
 	pub fn values_mut(&mut self) -> ValuesMut<K, V, C> {
-		ValuesMut { inner: self.iter_mut() }
+		ValuesMut {
+			inner: self.iter_mut(),
+		}
 	}
 
 	/// Creates an iterator which uses a closure to determine if an element should be removed.
@@ -978,7 +977,10 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// assert_eq!(odds.keys().copied().collect::<Vec<_>>(), vec![1, 3, 5, 7]);
 	/// ```
 	#[inline]
-	pub fn drain_filter<F>(&mut self, pred: F) -> DrainFilter<K, V, C, F> where F: FnMut(&K, &mut V) -> bool {
+	pub fn drain_filter<F>(&mut self, pred: F) -> DrainFilter<K, V, C, F>
+	where
+		F: FnMut(&K, &mut V) -> bool,
+	{
 		DrainFilter::new(self, pred)
 	}
 
@@ -1033,7 +1035,11 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// assert_eq!(a[&5], "f");
 	/// ```
 	#[inline]
-	pub fn append(&mut self, other: &mut Self) where K: Ord, C: Default {
+	pub fn append(&mut self, other: &mut Self)
+	where
+		K: Ord,
+		C: Default,
+	{
 		// Do we have to append anything at all?
 		if other.is_empty() {
 			return;
@@ -1049,11 +1055,6 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 		for (key, value) in other {
 			self.insert(key, value);
 		}
-	}
-
-	#[inline]
-	pub fn into_iter(self) -> IntoIter<K, V, C> {
-		IntoIter::new(self)
 	}
 
 	/// Creates a consuming iterator visiting all the keys, in sorted order.
@@ -1074,7 +1075,9 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// ```
 	#[inline]
 	pub fn into_keys(self) -> IntoKeys<K, V, C> {
-		IntoKeys { inner: self.into_iter() }
+		IntoKeys {
+			inner: self.into_iter(),
+		}
 	}
 
 	/// Creates a consuming iterator visiting all the values, in order by key.
@@ -1095,7 +1098,9 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// ```
 	#[inline]
 	pub fn into_values(self) -> IntoValues<K, V, C> {
-		IntoValues { inner: self.into_iter() }
+		IntoValues {
+			inner: self.into_iter(),
+		}
 	}
 
 	/// Try to rotate left the node `id` to benefits the child number `deficient_child_index`.
@@ -1103,23 +1108,36 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Returns true if the rotation succeeded, of false if the target child has no right sibling,
 	/// or if this sibling would underflow.
 	#[inline]
-	fn try_rotate_left(&mut self, id: usize, deficient_child_index: usize, addr: &mut Address) -> bool {
+	fn try_rotate_left(
+		&mut self,
+		id: usize,
+		deficient_child_index: usize,
+		addr: &mut Address,
+	) -> bool {
 		let pivot_offset = deficient_child_index.into();
 		let right_sibling_index = deficient_child_index + 1;
 		let (right_sibling_id, deficient_child_id) = {
 			let node = self.node(id);
 
 			if right_sibling_index >= node.child_count() {
-				return false // no right sibling
+				return false; // no right sibling
 			}
 
-			(node.child_id(right_sibling_index), node.child_id(deficient_child_index))
+			(
+				node.child_id(right_sibling_index),
+				node.child_id(deficient_child_index),
+			)
 		};
 
 		match self.node_mut(right_sibling_id).pop_left() {
 			Ok((mut value, opt_child_id)) => {
-				std::mem::swap(&mut value, self.node_mut(id).item_mut(pivot_offset).unwrap());
-				let left_offset = self.node_mut(deficient_child_id).push_right(value, opt_child_id);
+				std::mem::swap(
+					&mut value,
+					self.node_mut(id).item_mut(pivot_offset).unwrap(),
+				);
+				let left_offset = self
+					.node_mut(deficient_child_id)
+					.push_right(value, opt_child_id);
 
 				// update opt_child's parent
 				if let Some(child_id) = opt_child_id {
@@ -1127,7 +1145,8 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 				}
 
 				// update address.
-				if addr.id == right_sibling_id { // addressed item is in the right node.
+				if addr.id == right_sibling_id {
+					// addressed item is in the right node.
 					if addr.offset == 0 {
 						// addressed item is moving to pivot.
 						addr.id = id;
@@ -1136,7 +1155,8 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 						// addressed item stays on right.
 						addr.offset.decr();
 					}
-				} else if addr.id == id { // addressed item is in the parent node.
+				} else if addr.id == id {
+					// addressed item is in the parent node.
 					if addr.offset == pivot_offset {
 						// addressed item is the pivot, moving to the left (deficient) node.
 						addr.id = deficient_child_id;
@@ -1145,8 +1165,8 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 				}
 
 				true // rotation succeeded
-			},
-			Err(WouldUnderflow) => false // the right sibling would underflow.
+			}
+			Err(WouldUnderflow) => false, // the right sibling would underflow.
 		}
 	}
 
@@ -1155,18 +1175,30 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 	/// Returns true if the rotation succeeded, of false if the target child has no left sibling,
 	/// or if this sibling would underflow.
 	#[inline]
-	fn try_rotate_right(&mut self, id: usize, deficient_child_index: usize, addr: &mut Address) -> bool {
+	fn try_rotate_right(
+		&mut self,
+		id: usize,
+		deficient_child_index: usize,
+		addr: &mut Address,
+	) -> bool {
 		if deficient_child_index > 0 {
 			let left_sibling_index = deficient_child_index - 1;
 			let pivot_offset = left_sibling_index.into();
 			let (left_sibling_id, deficient_child_id) = {
 				let node = self.node(id);
-				(node.child_id(left_sibling_index), node.child_id(deficient_child_index))
+				(
+					node.child_id(left_sibling_index),
+					node.child_id(deficient_child_index),
+				)
 			};
 			match self.node_mut(left_sibling_id).pop_right() {
 				Ok((left_offset, mut value, opt_child_id)) => {
-					std::mem::swap(&mut value, self.node_mut(id).item_mut(pivot_offset).unwrap());
-					self.node_mut(deficient_child_id).push_left(value, opt_child_id);
+					std::mem::swap(
+						&mut value,
+						self.node_mut(id).item_mut(pivot_offset).unwrap(),
+					);
+					self.node_mut(deficient_child_id)
+						.push_left(value, opt_child_id);
 
 					// update opt_child's parent
 					if let Some(child_id) = opt_child_id {
@@ -1174,15 +1206,18 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 					}
 
 					// update address.
-					if addr.id == deficient_child_id { // addressed item is in the right (deficient) node.
+					if addr.id == deficient_child_id {
+						// addressed item is in the right (deficient) node.
 						addr.offset.incr();
-					} else if addr.id == left_sibling_id { // addressed item is in the left node.
+					} else if addr.id == left_sibling_id {
+						// addressed item is in the left node.
 						if addr.offset == left_offset {
 							// addressed item is moving to pivot.
 							addr.id = id;
 							addr.offset = pivot_offset;
 						}
-					} else if addr.id == id { // addressed item is in the parent node.
+					} else if addr.id == id {
+						// addressed item is in the parent node.
 						if addr.offset == pivot_offset {
 							// addressed item is the pivot, moving to the left (deficient) node.
 							addr.id = deficient_child_id;
@@ -1191,8 +1226,8 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 					}
 
 					true // rotation succeeded
-				},
-				Err(WouldUnderflow) => false // the left sibling would underflow.
+				}
+				Err(WouldUnderflow) => false, // the left sibling would underflow.
 			}
 		} else {
 			false // no left sibling.
@@ -1201,13 +1236,20 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 
 	/// Merge the child `deficient_child_index` in node `id` with one of its direct sibling.
 	#[inline]
-	fn merge(&mut self, id: usize, deficient_child_index: usize, mut addr: Address) -> (Balance, Address) {
+	fn merge(
+		&mut self,
+		id: usize,
+		deficient_child_index: usize,
+		mut addr: Address,
+	) -> (Balance, Address) {
 		let (offset, left_id, right_id, separator, balance) = if deficient_child_index > 0 {
 			// merge with left sibling
-			self.node_mut(id).merge(deficient_child_index-1, deficient_child_index)
+			self.node_mut(id)
+				.merge(deficient_child_index - 1, deficient_child_index)
 		} else {
 			// merge with right sibling
-			self.node_mut(id).merge(deficient_child_index, deficient_child_index+1)
+			self.node_mut(id)
+				.merge(deficient_child_index, deficient_child_index + 1)
 		};
 
 		// update children's parent.
@@ -1221,11 +1263,15 @@ impl<K, V, C: SlabMut<Node<K, V>>> BTreeMap<K, V, C> {
 
 		// update addr.
 		if addr.id == id {
-			if addr.offset == offset {
-				addr.id = left_id;
-				addr.offset = left_offset;
-			} else if addr.offset > offset {
-				addr.offset.decr();
+			match addr.offset.partial_cmp(&offset) {
+				Some(Ordering::Equal) => {
+					addr.id = left_id;
+					addr.offset = left_offset
+				}
+				Some(Ordering::Greater) => {
+					addr.offset.decr()
+				},
+				_ => ()
 			}
 		} else if addr.id == right_id {
 			addr.id = left_id;
@@ -1254,7 +1300,9 @@ where
 	}
 }
 
-impl<K, L: PartialEq<K>, V, W: PartialEq<V>, C: Slab<Node<K, V>>, D: Slab<Node<L, W>>> PartialEq<BTreeMap<L, W, D>> for BTreeMap<K, V, C> {
+impl<K, L: PartialEq<K>, V, W: PartialEq<V>, C: Slab<Node<K, V>>, D: Slab<Node<L, W>>>
+	PartialEq<BTreeMap<L, W, D>> for BTreeMap<K, V, C>
+{
 	fn eq(&self, other: &BTreeMap<L, W, D>) -> bool {
 		if self.len() == other.len() {
 			let mut it1 = self.iter();
@@ -1265,10 +1313,10 @@ impl<K, L: PartialEq<K>, V, W: PartialEq<V>, C: Slab<Node<K, V>>, D: Slab<Node<L
 					(None, None) => break,
 					(Some((k, v)), Some((l, w))) => {
 						if l != k || w != v {
-							return false
+							return false;
 						}
-					},
-					_ => return false
+					}
+					_ => return false,
 				}
 			}
 
@@ -1288,7 +1336,10 @@ impl<K, V, C: Default> Default for BTreeMap<K, V, C> {
 
 impl<K: Ord, V, C: SlabMut<Node<K, V>> + Default> FromIterator<(K, V)> for BTreeMap<K, V, C> {
 	#[inline]
-	fn from_iter<T>(iter: T) -> BTreeMap<K, V, C> where T: IntoIterator<Item = (K, V)> {
+	fn from_iter<T>(iter: T) -> BTreeMap<K, V, C>
+	where
+		T: IntoIterator<Item = (K, V)>,
+	{
 		let mut map = BTreeMap::new();
 
 		for (key, value) in iter {
@@ -1301,23 +1352,33 @@ impl<K: Ord, V, C: SlabMut<Node<K, V>> + Default> FromIterator<(K, V)> for BTree
 
 impl<K: Ord, V, C: SlabMut<Node<K, V>>> Extend<(K, V)> for BTreeMap<K, V, C> {
 	#[inline]
-	fn extend<T>(&mut self, iter: T) where T: IntoIterator<Item = (K, V)> {
+	fn extend<T>(&mut self, iter: T)
+	where
+		T: IntoIterator<Item = (K, V)>,
+	{
 		for (key, value) in iter {
 			self.insert(key, value);
 		}
 	}
 }
 
-impl<'a, K: Ord + Copy, V: Copy, C: SlabMut<Node<K, V>>> Extend<(&'a K, &'a V)> for BTreeMap<K, V, C> {
+impl<'a, K: Ord + Copy, V: Copy, C: SlabMut<Node<K, V>>> Extend<(&'a K, &'a V)>
+	for BTreeMap<K, V, C>
+{
 	#[inline]
-	fn extend<T>(&mut self, iter: T) where T: IntoIterator<Item = (&'a K, &'a V)> {
+	fn extend<T>(&mut self, iter: T)
+	where
+		T: IntoIterator<Item = (&'a K, &'a V)>,
+	{
 		self.extend(iter.into_iter().map(|(&key, &value)| (key, value)));
 	}
 }
 
 impl<K: Eq, V: Eq, C: Slab<Node<K, V>>> Eq for BTreeMap<K, V, C> {}
 
-impl<K, L: PartialOrd<K>, V, W: PartialOrd<V>, C: Slab<Node<K, V>>, D: Slab<Node<L, W>>> PartialOrd<BTreeMap<L, W, D>> for BTreeMap<K, V, C> {
+impl<K, L: PartialOrd<K>, V, W: PartialOrd<V>, C: Slab<Node<K, V>>, D: Slab<Node<L, W>>>
+	PartialOrd<BTreeMap<L, W, D>> for BTreeMap<K, V, C>
+{
 	fn partial_cmp(&self, other: &BTreeMap<L, W, D>) -> Option<Ordering> {
 		let mut it1 = self.iter();
 		let mut it2 = other.iter();
@@ -1334,10 +1395,10 @@ impl<K, L: PartialOrd<K>, V, W: PartialOrd<V>, C: Slab<Node<K, V>>, D: Slab<Node
 						Some(Ordering::Greater) => return Some(Ordering::Less),
 						Some(Ordering::Less) => return Some(Ordering::Greater),
 						Some(Ordering::Equal) => (),
-						None => return None
+						None => return None,
 					},
-					None => return None
-				}
+					None => return None,
+				},
 			}
 		}
 	}
@@ -1359,9 +1420,9 @@ impl<K: Ord, V: Ord, C: Slab<Node<K, V>>> Ord for BTreeMap<K, V, C> {
 					Ordering::Equal => match w.cmp(v) {
 						Ordering::Greater => return Ordering::Less,
 						Ordering::Less => return Ordering::Greater,
-						Ordering::Equal => ()
-					}
-				}
+						Ordering::Equal => (),
+					},
+				},
 			}
 		}
 	}
@@ -1386,7 +1447,7 @@ pub struct Iter<'a, K, V, C> {
 
 	end: Option<Address>,
 
-	len: usize
+	len: usize,
 }
 
 impl<'a, K, V, C: Slab<Node<K, V>>> Iter<'a, K, V, C> {
@@ -1398,7 +1459,7 @@ impl<'a, K, V, C: Slab<Node<K, V>>> Iter<'a, K, V, C> {
 			btree,
 			addr,
 			end: None,
-			len
+			len,
 		}
 	}
 }
@@ -1424,22 +1485,22 @@ impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Iter<'a, K, V, C> {
 				} else {
 					None
 				}
-			},
-			None => None
+			}
+			None => None,
 		}
 	}
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Iter<'a, K, V, C> { }
-impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Iter<'a, K, V, C> { }
+impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Iter<'a, K, V, C> {}
+impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Iter<'a, K, V, C> {}
 
 impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Iter<'a, K, V, C> {
 	#[inline]
 	fn next_back(&mut self) -> Option<(&'a K, &'a V)> {
 		if self.len > 0 {
 			let addr = match self.end {
-				Some(addr) =>  self.btree.previous_item_address(addr).unwrap(),
-				None => self.btree.last_item_address().unwrap()
+				Some(addr) => self.btree.previous_item_address(addr).unwrap(),
+				None => self.btree.last_item_address().unwrap(),
 			};
 
 			self.len -= 1;
@@ -1472,7 +1533,7 @@ pub struct IterMut<'a, K, V, C> {
 
 	end: Option<Address>,
 
-	len: usize
+	len: usize,
 }
 
 impl<'a, K, V, C: SlabMut<Node<K, V>>> IterMut<'a, K, V, C> {
@@ -1484,7 +1545,7 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> IterMut<'a, K, V, C> {
 			btree,
 			addr,
 			end: None,
-			len
+			len,
 		}
 	}
 
@@ -1501,8 +1562,8 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> IterMut<'a, K, V, C> {
 				} else {
 					None
 				}
-			},
-			None => None
+			}
+			None => None,
 		}
 	}
 
@@ -1510,8 +1571,8 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> IterMut<'a, K, V, C> {
 	fn next_back_item(&mut self) -> Option<&'a mut Item<K, V>> {
 		if self.len > 0 {
 			let addr = match self.end {
-				Some(addr) =>  self.btree.previous_item_address(addr).unwrap(),
-				None => self.btree.last_item_address().unwrap()
+				Some(addr) => self.btree.previous_item_address(addr).unwrap(),
+				None => self.btree.last_item_address().unwrap(),
 			};
 
 			self.len -= 1;
@@ -1542,8 +1603,8 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for IterMut<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for IterMut<'a, K, V, C> { }
-impl<'a, K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IterMut<'a, K, V, C> { }
+impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for IterMut<'a, K, V, C> {}
+impl<'a, K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IterMut<'a, K, V, C> {}
 
 impl<'a, K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IterMut<'a, K, V, C> {
 	#[inline]
@@ -1563,7 +1624,7 @@ pub struct EntriesMut<'a, K, V, C> {
 	/// Address of the next item, or last valid address.
 	addr: Address,
 
-	len: usize
+	len: usize,
 }
 
 impl<'a, K, V, C: SlabMut<Node<K, V>>> EntriesMut<'a, K, V, C> {
@@ -1572,11 +1633,7 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> EntriesMut<'a, K, V, C> {
 	fn new(btree: &'a mut BTreeMap<K, V, C>) -> EntriesMut<'a, K, V, C> {
 		let addr = btree.first_back_address();
 		let len = btree.len();
-		EntriesMut {
-			btree,
-			addr,
-			len
-		}
+		EntriesMut { btree, addr, len }
 	}
 
 	/// Get the next visited item without moving the iterator position.
@@ -1599,16 +1656,16 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> EntriesMut<'a, K, V, C> {
 			Some(item) => unsafe {
 				self.len -= 1;
 				self.addr = after_addr.unwrap();
-				Some(std::mem::transmute(item as *mut _)) // this is safe because only one mutable reference to the same item can be emitted.
+				Some(&mut * (item as *mut _)) // this is safe because only one mutable reference to the same item can be emitted.
 			},
-			None => None
+			None => None,
 		}
 	}
 
 	/// Insert a new item in the map before the next item.
 	///
 	/// ## Correctness
-	/// 
+	///
 	/// It is safe to insert any key-value pair here, however this might break the well-formedness
 	/// of the underlying tree, which relies on several invariants.
 	/// To preserve these invariants,
@@ -1632,8 +1689,8 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> EntriesMut<'a, K, V, C> {
 				self.len -= 1;
 				self.addr = addr;
 				Some(item)
-			},
-			None => None
+			}
+			None => None,
 		}
 	}
 }
@@ -1652,8 +1709,8 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for EntriesMut<'a, K, V, C> {
 			Some(item) => {
 				let (key, value) = item.as_pair_mut();
 				Some((key, value)) // coerce k from `&mut K` to `&K`
-			},
-			None => None
+			}
+			None => None,
 		}
 	}
 }
@@ -1675,7 +1732,7 @@ pub struct IntoIter<K, V, C> {
 	end: Option<Address>,
 
 	/// Number of remaining items.
-	len: usize
+	len: usize,
 }
 
 impl<K, V, C: SlabMut<Node<K, V>>> IntoIter<K, V, C> {
@@ -1687,13 +1744,13 @@ impl<K, V, C: SlabMut<Node<K, V>>> IntoIter<K, V, C> {
 			btree,
 			addr,
 			end: None,
-			len
+			len,
 		}
 	}
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoIter<K, V, C> { }
-impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoIter<K, V, C> { }
+impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoIter<K, V, C> {}
+impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoIter<K, V, C> {}
 
 impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoIter<K, V, C> {
 	type Item = (K, V);
@@ -1709,21 +1766,21 @@ impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoIter<K, V, C> {
 			Some(addr) => {
 				if self.len > 0 {
 					self.len -= 1;
-		
+
 					let item = unsafe {
 						// this is safe because the item at `self.addr` exists and is never touched again.
 						std::ptr::read(self.btree.item(addr).unwrap())
 					};
-		
+
 					if self.len > 0 {
 						self.addr = self.btree.next_back_address(addr); // an item address is always followed by a valid address.
-		
+
 						while let Some(addr) = self.addr {
 							if addr.offset < self.btree.node(addr.id).item_count() {
-								break // we have found an item address.
+								break; // we have found an item address.
 							} else {
 								self.addr = self.btree.next_back_address(addr);
-		
+
 								// we have gove through every item of the node, we can release it.
 								let node = self.btree.release_node(addr.id);
 								std::mem::forget(node); // do not call `drop` on the node since items have been moved.
@@ -1735,7 +1792,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoIter<K, V, C> {
 							while self.addr != self.end {
 								let addr = self.addr.unwrap();
 								self.addr = self.btree.next_back_address(addr);
-	
+
 								if addr.offset >= self.btree.node(addr.id).item_count() {
 									let node = self.btree.release_node(addr.id);
 									std::mem::forget(node); // do not call `drop` on the node since items have been moved.
@@ -1752,13 +1809,13 @@ impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoIter<K, V, C> {
 							}
 						}
 					}
-		
+
 					Some(item.into_pair())
 				} else {
 					None
 				}
-			},
-			None => None
+			}
+			None => None,
 		}
 	}
 }
@@ -1772,15 +1829,15 @@ impl<K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IntoIter<K, V, C> {
 					while addr.offset.is_before() {
 						let id = addr.id;
 						addr = self.btree.previous_front_address(addr).unwrap();
-	
+
 						// we have gove through every item of the node, we can release it.
 						let node = self.btree.release_node(id);
 						std::mem::forget(node); // do not call `drop` on the node since items have been moved.
 					}
 
 					addr
-				},
-				None => self.btree.last_item_address().unwrap()
+				}
+				None => self.btree.last_item_address().unwrap(),
 			};
 
 			self.len -= 1;
@@ -1827,7 +1884,7 @@ impl<K, V, C: SlabMut<Node<K, V>>> IntoIterator for BTreeMap<K, V, C> {
 
 	#[inline]
 	fn into_iter(self) -> IntoIter<K, V, C> {
-		self.into_iter()
+		IntoIter::new(self)
 	}
 }
 
@@ -1838,7 +1895,7 @@ pub(crate) struct DrainFilterInner<'a, K, V, C> {
 	/// Address of the next item, or last valid address.
 	addr: Address,
 
-	len: usize
+	len: usize,
 }
 
 impl<'a, K: 'a, V: 'a, C: SlabMut<Node<K, V>>> DrainFilterInner<'a, K, V, C> {
@@ -1846,11 +1903,7 @@ impl<'a, K: 'a, V: 'a, C: SlabMut<Node<K, V>>> DrainFilterInner<'a, K, V, C> {
 	pub fn new(btree: &'a mut BTreeMap<K, V, C>) -> Self {
 		let addr = btree.first_back_address();
 		let len = btree.len();
-		DrainFilterInner {
-			btree,
-			addr,
-			len
-		}
+		DrainFilterInner { btree, addr, len }
 	}
 
 	#[inline]
@@ -1859,7 +1912,10 @@ impl<'a, K: 'a, V: 'a, C: SlabMut<Node<K, V>>> DrainFilterInner<'a, K, V, C> {
 	}
 
 	#[inline]
-	fn next_item<F>(&mut self, pred: &mut F) -> Option<Item<K, V>> where F: FnMut(&K, &mut V) -> bool {
+	fn next_item<F>(&mut self, pred: &mut F) -> Option<Item<K, V>>
+	where
+		F: FnMut(&K, &mut V) -> bool,
+	{
 		loop {
 			match self.btree.item_mut(self.addr) {
 				Some(item) => {
@@ -1868,44 +1924,56 @@ impl<'a, K: 'a, V: 'a, C: SlabMut<Node<K, V>>> DrainFilterInner<'a, K, V, C> {
 					if (*pred)(key, value) {
 						let (item, next_addr) = self.btree.remove_at(self.addr).unwrap();
 						self.addr = next_addr;
-						return Some(item)
+						return Some(item);
 					} else {
 						self.addr = self.btree.next_item_or_back_address(self.addr).unwrap();
 					}
-				},
-				None => return None
+				}
+				None => return None,
 			}
 		}
 	}
 
 	#[inline]
-	pub fn next<F>(&mut self, pred: &mut F) -> Option<(K, V)> where F: FnMut(&K, &mut V) -> bool {
-		match self.next_item(pred) {
-			Some(item) => Some(item.into_pair()),
-			None => None
-		}
+	pub fn next<F>(&mut self, pred: &mut F) -> Option<(K, V)>
+	where
+		F: FnMut(&K, &mut V) -> bool,
+	{
+		self.next_item(pred).map(Item::into_pair)
 	}
 }
 
-pub struct DrainFilter<'a, K, V, C: SlabMut<Node<K, V>>, F> where F: FnMut(&K, &mut V) -> bool {
+pub struct DrainFilter<'a, K, V, C: SlabMut<Node<K, V>>, F>
+where
+	F: FnMut(&K, &mut V) -> bool,
+{
 	pred: F,
 
-	inner: DrainFilterInner<'a, K, V, C>
+	inner: DrainFilterInner<'a, K, V, C>,
 }
 
-impl<'a, K: 'a, V: 'a, C: SlabMut<Node<K, V>>, F> DrainFilter<'a, K, V, C, F> where F: FnMut(&K, &mut V) -> bool {
+impl<'a, K: 'a, V: 'a, C: SlabMut<Node<K, V>>, F> DrainFilter<'a, K, V, C, F>
+where
+	F: FnMut(&K, &mut V) -> bool,
+{
 	#[inline]
 	fn new(btree: &'a mut BTreeMap<K, V, C>, pred: F) -> Self {
 		DrainFilter {
 			pred,
-			inner: DrainFilterInner::new(btree)
+			inner: DrainFilterInner::new(btree),
 		}
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>, F> FusedIterator for DrainFilter<'a, K, V, C, F> where F: FnMut(&K, &mut V) -> bool { }
+impl<'a, K, V, C: SlabMut<Node<K, V>>, F> FusedIterator for DrainFilter<'a, K, V, C, F> where
+	F: FnMut(&K, &mut V) -> bool
+{
+}
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>, F> Iterator for DrainFilter<'a, K, V, C, F> where F: FnMut(&K, &mut V) -> bool {
+impl<'a, K, V, C: SlabMut<Node<K, V>>, F> Iterator for DrainFilter<'a, K, V, C, F>
+where
+	F: FnMut(&K, &mut V) -> bool,
+{
 	type Item = (K, V);
 
 	#[inline]
@@ -1919,23 +1987,26 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>, F> Iterator for DrainFilter<'a, K, V, C, 
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>, F> Drop for DrainFilter<'a, K, V, C, F> where F: FnMut(&K, &mut V) -> bool {
+impl<'a, K, V, C: SlabMut<Node<K, V>>, F> Drop for DrainFilter<'a, K, V, C, F>
+where
+	F: FnMut(&K, &mut V) -> bool,
+{
 	#[inline]
 	fn drop(&mut self) {
 		loop {
 			if self.next().is_none() {
-				break
+				break;
 			}
 		}
 	}
 }
 
 pub struct Keys<'a, K, V, C> {
-	inner: Iter<'a, K, V, C>
+	inner: Iter<'a, K, V, C>,
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Keys<'a, K, V, C> { }
-impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Keys<'a, K, V, C> { }
+impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Keys<'a, K, V, C> {}
+impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Keys<'a, K, V, C> {}
 
 impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Keys<'a, K, V, C> {
 	type Item = &'a K;
@@ -1958,11 +2029,11 @@ impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Keys<'a, K, V, C> {
 	}
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoKeys<K, V, C> { }
-impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoKeys<K, V, C> { }
+impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoKeys<K, V, C> {}
+impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoKeys<K, V, C> {}
 
 pub struct IntoKeys<K, V, C> {
-	inner: IntoIter<K, V, C>
+	inner: IntoIter<K, V, C>,
 }
 
 impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoKeys<K, V, C> {
@@ -1986,11 +2057,11 @@ impl<K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IntoKeys<K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Values<'a, K, V, C> { }
-impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Values<'a, K, V, C> { }
+impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Values<'a, K, V, C> {}
+impl<'a, K, V, C: Slab<Node<K, V>>> ExactSizeIterator for Values<'a, K, V, C> {}
 
 pub struct Values<'a, K, V, C> {
-	inner: Iter<'a, K, V, C>
+	inner: Iter<'a, K, V, C>,
 }
 
 impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Values<'a, K, V, C> {
@@ -2015,11 +2086,11 @@ impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Values<'a, K, V, C> 
 }
 
 pub struct ValuesMut<'a, K, V, C> {
-	inner: IterMut<'a, K, V, C>
+	inner: IterMut<'a, K, V, C>,
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for ValuesMut<'a, K, V, C> { }
-impl<'a, K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for ValuesMut<'a, K, V, C> { }
+impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for ValuesMut<'a, K, V, C> {}
+impl<'a, K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for ValuesMut<'a, K, V, C> {}
 
 impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for ValuesMut<'a, K, V, C> {
 	type Item = &'a mut V;
@@ -2036,11 +2107,11 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for ValuesMut<'a, K, V, C> {
 }
 
 pub struct IntoValues<K, V, C> {
-	inner: IntoIter<K, V, C>
+	inner: IntoIter<K, V, C>,
 }
 
-impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoValues<K, V, C> { }
-impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoValues<K, V, C> { }
+impl<K, V, C: SlabMut<Node<K, V>>> FusedIterator for IntoValues<K, V, C> {}
+impl<K, V, C: SlabMut<Node<K, V>>> ExactSizeIterator for IntoValues<K, V, C> {}
 
 impl<K, V, C: SlabMut<Node<K, V>>> Iterator for IntoValues<K, V, C> {
 	type Item = V;
@@ -2063,7 +2134,11 @@ impl<K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for IntoValues<K, V, C> {
 	}
 }
 
-fn is_valid_range<T, R>(range: &R) -> bool where T: Ord + ?Sized, R: RangeBounds<T> {
+fn is_valid_range<T, R>(range: &R) -> bool
+where
+	T: Ord + ?Sized,
+	R: RangeBounds<T>,
+{
 	match (range.start_bound(), range.end_bound()) {
 		(Bound::Included(start), Bound::Included(end)) => start <= end,
 		(Bound::Included(start), Bound::Excluded(end)) => start <= end,
@@ -2071,7 +2146,7 @@ fn is_valid_range<T, R>(range: &R) -> bool where T: Ord + ?Sized, R: RangeBounds
 		(Bound::Excluded(start), Bound::Included(end)) => start <= end,
 		(Bound::Excluded(start), Bound::Excluded(end)) => start < end,
 		(Bound::Excluded(_), Bound::Unbounded) => true,
-		(Bound::Unbounded, _) => true
+		(Bound::Unbounded, _) => true,
 	}
 }
 
@@ -2082,52 +2157,45 @@ pub struct Range<'a, K, V, C> {
 	/// Address of the next item or last back address.
 	addr: Address,
 
-	end: Address
+	end: Address,
 }
 
 impl<'a, K, V, C: Slab<Node<K, V>>> Range<'a, K, V, C> {
-	fn new<T, R>(btree: &'a BTreeMap<K, V, C>, range: R) -> Self where T: Ord + ?Sized, R: RangeBounds<T>, K: Borrow<T> {
+	fn new<T, R>(btree: &'a BTreeMap<K, V, C>, range: R) -> Self
+	where
+		T: Ord + ?Sized,
+		R: RangeBounds<T>,
+		K: Borrow<T>,
+	{
 		if !is_valid_range(&range) {
 			panic!("Invalid range")
 		}
 
 		let addr = match range.start_bound() {
-			Bound::Included(start) => {
-				match btree.address_of(start) {
-					Ok(addr) => addr,
-					Err(addr) => addr
-				}
+			Bound::Included(start) => match btree.address_of(start) {
+				Ok(addr) => addr,
+				Err(addr) => addr,
 			},
-			Bound::Excluded(start) => {
-				match btree.address_of(start) {
-					Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
-					Err(addr) => addr
-				}
+			Bound::Excluded(start) => match btree.address_of(start) {
+				Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
+				Err(addr) => addr,
 			},
-			Bound::Unbounded => btree.first_back_address()
+			Bound::Unbounded => btree.first_back_address(),
 		};
 
 		let end = match range.end_bound() {
-			Bound::Included(end) => {
-				match btree.address_of(end) {
-					Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
-					Err(addr) => addr
-				}
+			Bound::Included(end) => match btree.address_of(end) {
+				Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
+				Err(addr) => addr,
 			},
-			Bound::Excluded(end) => {
-				match btree.address_of(end) {
-					Ok(addr) => addr,
-					Err(addr) => addr
-				}
+			Bound::Excluded(end) => match btree.address_of(end) {
+				Ok(addr) => addr,
+				Err(addr) => addr,
 			},
-			Bound::Unbounded => btree.first_back_address()
+			Bound::Unbounded => btree.first_back_address(),
 		};
-		
-		Range {
-			btree,
-			addr,
-			end
-		}
+
+		Range { btree, addr, end }
 	}
 }
 
@@ -2146,7 +2214,7 @@ impl<'a, K, V, C: Slab<Node<K, V>>> Iterator for Range<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Range<'a, K, V, C> { }
+impl<'a, K, V, C: Slab<Node<K, V>>> FusedIterator for Range<'a, K, V, C> {}
 
 impl<'a, K, V, C: Slab<Node<K, V>>> DoubleEndedIterator for Range<'a, K, V, C> {
 	#[inline]
@@ -2169,52 +2237,45 @@ pub struct RangeMut<'a, K, V, C> {
 	/// Address of the next item or last back address.
 	addr: Address,
 
-	end: Address
+	end: Address,
 }
 
 impl<'a, K, V, C: SlabMut<Node<K, V>>> RangeMut<'a, K, V, C> {
-	fn new<T, R>(btree: &'a mut BTreeMap<K, V, C>, range: R) -> Self where T: Ord + ?Sized, R: RangeBounds<T>, K: Borrow<T> {
+	fn new<T, R>(btree: &'a mut BTreeMap<K, V, C>, range: R) -> Self
+	where
+		T: Ord + ?Sized,
+		R: RangeBounds<T>,
+		K: Borrow<T>,
+	{
 		if !is_valid_range(&range) {
 			panic!("Invalid range")
 		}
 
 		let addr = match range.start_bound() {
-			Bound::Included(start) => {
-				match btree.address_of(start) {
-					Ok(addr) => addr,
-					Err(addr) => addr
-				}
+			Bound::Included(start) => match btree.address_of(start) {
+				Ok(addr) => addr,
+				Err(addr) => addr,
 			},
-			Bound::Excluded(start) => {
-				match btree.address_of(start) {
-					Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
-					Err(addr) => addr
-				}
+			Bound::Excluded(start) => match btree.address_of(start) {
+				Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
+				Err(addr) => addr,
 			},
-			Bound::Unbounded => btree.first_back_address()
+			Bound::Unbounded => btree.first_back_address(),
 		};
 
 		let end = match range.end_bound() {
-			Bound::Included(end) => {
-				match btree.address_of(end) {
-					Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
-					Err(addr) => addr
-				}
+			Bound::Included(end) => match btree.address_of(end) {
+				Ok(addr) => btree.next_item_or_back_address(addr).unwrap(),
+				Err(addr) => addr,
 			},
-			Bound::Excluded(end) => {
-				match btree.address_of(end) {
-					Ok(addr) => addr,
-					Err(addr) => addr
-				}
+			Bound::Excluded(end) => match btree.address_of(end) {
+				Ok(addr) => addr,
+				Err(addr) => addr,
 			},
-			Bound::Unbounded => btree.first_back_address()
+			Bound::Unbounded => btree.first_back_address(),
 		};
-		
-		RangeMut {
-			btree,
-			addr,
-			end
-		}
+
+		RangeMut { btree, addr, end }
 	}
 
 	#[inline]
@@ -2254,7 +2315,7 @@ impl<'a, K, V, C: SlabMut<Node<K, V>>> Iterator for RangeMut<'a, K, V, C> {
 	}
 }
 
-impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for RangeMut<'a, K, V, C> { }
+impl<'a, K, V, C: SlabMut<Node<K, V>>> FusedIterator for RangeMut<'a, K, V, C> {}
 
 impl<'a, K, V, C: SlabMut<Node<K, V>>> DoubleEndedIterator for RangeMut<'a, K, V, C> {
 	#[inline]
