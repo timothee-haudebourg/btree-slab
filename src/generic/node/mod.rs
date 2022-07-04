@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 mod addr;
 pub mod internal;
-pub mod item;
+mod item;
 mod leaf;
 
 pub use addr::Address;
