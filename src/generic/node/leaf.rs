@@ -8,11 +8,11 @@ use crate::{
 use smallvec::SmallVec;
 use std::borrow::Borrow;
 
-#[cfg(feature = "dep:serde")]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "dep:serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Leaf<K, V> {
 	parent: usize,
 	items: SmallVec<[Item<K, V>; M + 1]>,

@@ -2,40 +2,38 @@ use super::Keyed;
 use std::fmt;
 use std::{cmp::Ordering, mem::MaybeUninit};
 
-#[cfg(feature = "dep:serde")]
-use serde::{
-	de::{Deserialize, Deserializer},
-	ser::{Serialize, SerializeStruct, Serializer},
-};
+#[cfg(feature = "serde")]
+use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
 
-#[cfg_attr(feature = "dep:serde", derive(Deserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+	feature = "serde",
+	serde(bound(
+		serialize = "K: Serialize, V: Serialize",
+		deserialize = "K: Deserialize<'de>, V: Deserialize<'de>"
+	))
+)]
 pub struct Item<K, V> {
 	/// # Safety
 	///
 	/// This field must always be initialized when the item is accessed and/or dropped.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "serialize_maybe_uninit"))]
 	#[cfg_attr(
-		feature = "dep:serde",
-		serde(serialize_with = "serialize_maybe_uninit")
-	)]
-	#[cfg_attr(
-		feature = "dep:serde",
+		feature = "serde",
 		serde(deserialize_with = "deserialize_maybe_uninit")
 	)]
-	#[cfg_attr(feature = "dep:serde", serde(bound = "K: Deserialize<'de>"))]
+	// #[cfg_attr(feature = "serde", serde(bound = "K: Deserialize<'de>"))]
 	key: MaybeUninit<K>,
 
 	/// # Safety
 	///
 	/// This field must always be initialized when the item is accessed and/or dropped.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "serialize_maybe_uninit"))]
 	#[cfg_attr(
-		feature = "dep:serde",
-		serde(serialize_with = "serialize_maybe_uninit")
-	)]
-	#[cfg_attr(
-		feature = "dep:serde",
+		feature = "serde",
 		serde(deserialize_with = "deserialize_maybe_uninit")
 	)]
-	#[cfg_attr(feature = "dep:serde", serde(bound = "V: Deserialize<'de>"))]
+	// #[cfg_attr(feature = "serde", serde(bound = "V: Deserialize<'de>"))]
 	value: MaybeUninit<V>,
 }
 
@@ -51,7 +49,7 @@ impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for Item<K, V> {
 	}
 }
 
-#[cfg(feature = "dep:serde")]
+#[cfg(feature = "serde")]
 fn serialize_maybe_uninit<T: Serialize, S: Serializer>(
 	val: &MaybeUninit<T>,
 	serializer: S,
@@ -60,7 +58,7 @@ fn serialize_maybe_uninit<T: Serialize, S: Serializer>(
 	val_ref.serialize(serializer)
 }
 
-#[cfg(feature = "dep:serde")]
+#[cfg(feature = "serde")]
 fn deserialize_maybe_uninit<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
 	deserializer: D,
 ) -> Result<MaybeUninit<T>, D::Error> {
