@@ -155,7 +155,7 @@ pub const M: usize = 8;
 #[derive(Clone)]
 pub struct BTreeMap<K, V, C> {
 	/// Allocated and free nodes.
-	nodes: C,
+	pub nodes: C,
 
 	/// Root node id.
 	root: Option<usize>,

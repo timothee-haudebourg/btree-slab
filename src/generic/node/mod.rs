@@ -2,7 +2,7 @@ use std::{borrow::Borrow, cmp::Ordering, fmt};
 
 mod addr;
 pub mod internal;
-mod item;
+pub mod item;
 mod leaf;
 
 pub use addr::Address;
@@ -163,8 +163,10 @@ pub struct WouldUnderflow;
 /// the right child of the item if it is removed from an internal node.
 pub type PoppedItem<K, V> = (Offset, Item<K, V>, Option<usize>);
 
+use serde::{Deserialize, Serialize};
+
 /// B-tree node.
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Node<K, V> {
 	/// Internal node.
 	Internal(InternalNode<K, V>),
