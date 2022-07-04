@@ -1,11 +1,12 @@
 use super::Keyed;
+use std::fmt;
 use std::{cmp::Ordering, mem::MaybeUninit};
 
 use serde::de::Deserializer;
 use serde::ser::{SerializeStruct, Serializer};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct Item<K, V> {
 	/// # Safety
 	///
@@ -20,6 +21,18 @@ pub struct Item<K, V> {
 	#[serde(deserialize_with = "deserialize_maybe_uninit")]
 	#[serde(bound = "V: Deserialize<'de>")]
 	value: MaybeUninit<V>,
+}
+
+impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for Item<K, V> {
+	/// # Safety:
+	///
+	/// Do not call this implementation on items which are not initialized.
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		f.debug_struct("Item")
+			.field("key", &self.key())
+			.field("value", &self.value())
+			.finish()
+	}
 }
 
 impl<K: Serialize, V: Serialize> Serialize for Item<K, V> {
