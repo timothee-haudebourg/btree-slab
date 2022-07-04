@@ -22,7 +22,6 @@ pub struct Item<K, V> {
 		feature = "serde",
 		serde(deserialize_with = "deserialize_maybe_uninit")
 	)]
-	// #[cfg_attr(feature = "serde", serde(bound = "K: Deserialize<'de>"))]
 	key: MaybeUninit<K>,
 
 	/// # Safety
@@ -33,14 +32,13 @@ pub struct Item<K, V> {
 		feature = "serde",
 		serde(deserialize_with = "deserialize_maybe_uninit")
 	)]
-	// #[cfg_attr(feature = "serde", serde(bound = "V: Deserialize<'de>"))]
 	value: MaybeUninit<V>,
 }
 
 impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for Item<K, V> {
 	/// # Safety:
 	///
-	/// Do not call this implementation on items which are not initialized.
+	/// This implementation assumes that the item's key and value are initialized.
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		f.debug_struct("Item")
 			.field("key", &self.key())
