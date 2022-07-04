@@ -1,5 +1,8 @@
 use std::{borrow::Borrow, cmp::Ordering, fmt};
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 mod addr;
 pub mod internal;
 mod item;
@@ -164,7 +167,8 @@ pub struct WouldUnderflow;
 pub type PoppedItem<K, V> = (Offset, Item<K, V>, Option<usize>);
 
 /// B-tree node.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub enum Node<K, V> {
 	/// Internal node.
 	Internal(InternalNode<K, V>),

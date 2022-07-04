@@ -1,16 +1,66 @@
 use super::Keyed;
+use std::fmt;
 use std::{cmp::Ordering, mem::MaybeUninit};
 
+#[cfg(feature = "serde")]
+use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
+
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+	feature = "serde",
+	serde(bound(
+		serialize = "K: Serialize, V: Serialize",
+		deserialize = "K: Deserialize<'de>, V: Deserialize<'de>"
+	))
+)]
 pub struct Item<K, V> {
 	/// # Safety
 	///
 	/// This field must always be initialized when the item is accessed and/or dropped.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "serialize_maybe_uninit"))]
+	#[cfg_attr(
+		feature = "serde",
+		serde(deserialize_with = "deserialize_maybe_uninit")
+	)]
 	key: MaybeUninit<K>,
 
 	/// # Safety
 	///
 	/// This field must always be initialized when the item is accessed and/or dropped.
+	#[cfg_attr(feature = "serde", serde(serialize_with = "serialize_maybe_uninit"))]
+	#[cfg_attr(
+		feature = "serde",
+		serde(deserialize_with = "deserialize_maybe_uninit")
+	)]
 	value: MaybeUninit<V>,
+}
+
+impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for Item<K, V> {
+	/// # Safety:
+	///
+	/// This implementation assumes that the item's key and value are initialized.
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		f.debug_struct("Item")
+			.field("key", &self.key())
+			.field("value", &self.value())
+			.finish()
+	}
+}
+
+#[cfg(feature = "serde")]
+fn serialize_maybe_uninit<T: Serialize, S: Serializer>(
+	val: &MaybeUninit<T>,
+	serializer: S,
+) -> Result<S::Ok, S::Error> {
+	let val_ref: &T = unsafe { val.assume_init_ref() };
+	val_ref.serialize(serializer)
+}
+
+#[cfg(feature = "serde")]
+fn deserialize_maybe_uninit<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
+	deserializer: D,
+) -> Result<MaybeUninit<T>, D::Error> {
+	T::deserialize(deserializer).map(|val| MaybeUninit::new(val))
 }
 
 impl<K: Clone, V: Clone> Clone for Item<K, V> {
