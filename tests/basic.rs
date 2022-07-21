@@ -1,4 +1,3 @@
-#![feature(nll)]
 use btree_slab::{
 	generic::{
 		map::{BTreeExt, BTreeExtMut},

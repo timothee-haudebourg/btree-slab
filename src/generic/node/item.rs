@@ -130,9 +130,8 @@ impl<K, V> Item<K, V> {
 	/// The value must be uninitialized.
 	#[inline]
 	pub unsafe fn forget_value(self) {
-		let (key, value) = self.into_inner();
-		std::mem::drop(key.assume_init());
-		std::mem::forget(value);
+		let (key, _) = self.into_inner();
+		std::mem::drop(key.assume_init())
 	}
 
 	#[inline]

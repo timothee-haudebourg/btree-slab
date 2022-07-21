@@ -2,7 +2,7 @@ use crate::generic::{
 	map::{BTreeMap, M},
 	node::{Address, Balance, Item, Node, Offset},
 };
-use cc_traits::{Slab, SlabMut};
+use cc_traits::{SimpleCollectionMut, SimpleCollectionRef, Slab, SlabMut};
 use smallvec::SmallVec;
 use std::{borrow::Borrow, mem::MaybeUninit};
 
@@ -316,7 +316,7 @@ pub trait BTreeExtMut<K, V> {
 
 impl<K, V, C: Slab<Node<K, V>>> BTreeExt<K, V> for BTreeMap<K, V, C>
 where
-	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
+	C: SimpleCollectionRef,
 {
 	#[inline]
 	fn root_id(&self) -> Option<usize> {
@@ -325,7 +325,7 @@ where
 
 	#[inline]
 	fn node(&self, id: usize) -> &Node<K, V> {
-		self.nodes.get(id).unwrap().into()
+		C::into_ref(self.nodes.get(id).unwrap())
 	}
 
 	#[inline]
@@ -732,8 +732,8 @@ where
 
 impl<K, V, C: SlabMut<Node<K, V>>> BTreeExtMut<K, V> for BTreeMap<K, V, C>
 where
-	for<'r> C::ItemRef<'r>: Into<&'r Node<K, V>>,
-	for<'r> C::ItemMut<'r>: Into<&'r mut Node<K, V>>,
+	C: SimpleCollectionRef,
+	C: SimpleCollectionMut,
 {
 	#[inline]
 	fn set_len(&mut self, new_len: usize) {
@@ -747,7 +747,7 @@ where
 
 	#[inline]
 	fn node_mut(&mut self, id: usize) -> &mut Node<K, V> {
-		self.nodes.get_mut(id).unwrap().into()
+		C::into_mut(self.nodes.get_mut(id).unwrap())
 	}
 
 	#[inline]
