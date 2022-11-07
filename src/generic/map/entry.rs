@@ -103,7 +103,6 @@ where
 	/// # Examples
 	///
 	/// ```
-	/// #![feature(or_insert_with_key)]
 	/// use btree_slab::BTreeMap;
 	///
 	/// let mut map: BTreeMap<&str, usize> = BTreeMap::new();
