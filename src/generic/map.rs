@@ -2020,10 +2020,10 @@ where
 	where
 		F: FnMut(&K, &mut V) -> bool,
 	{
-		if self.addr.id.is_nowhere() {
+		if self.addr.id == usize::MAX {
 			return None;
 		}
-		
+
 		loop {
 			match self.btree.item_mut(self.addr) {
 				Some(item) => {
