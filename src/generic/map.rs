@@ -2020,6 +2020,10 @@ where
 	where
 		F: FnMut(&K, &mut V) -> bool,
 	{
+		if self.addr.id.is_nowhere() {
+			return None;
+		}
+		
 		loop {
 			match self.btree.item_mut(self.addr) {
 				Some(item) => {
