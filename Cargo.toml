@@ -1,6 +1,6 @@
 [package]
 name = "btree-slab"
-version = "0.5.1"
+version = "0.6.0"
 authors = ["Timothée Haudebourg <author@haudebourg.net>"]
 edition = "2021"
 categories = ["data-structures"]
@@ -18,7 +18,7 @@ std-slab = ["slab", "cc-traits/slab"]
 
 [dependencies]
 smallvec = "1.8.0"
-cc-traits = "1"
+cc-traits = "2.0"
 slab = { version = "0.4.5", optional = true }
 
 [dev-dependencies]
