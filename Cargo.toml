@@ -1,6 +1,6 @@
 [package]
 name = "btree-slab"
-version = "0.6.0"
+version = "0.6.1"
 authors = ["Timothée Haudebourg <author@haudebourg.net>"]
 edition = "2021"
 categories = ["data-structures"]
