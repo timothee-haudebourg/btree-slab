@@ -189,6 +189,28 @@ pub fn update() {
 	}
 }
 
+#[test]
+pub fn drain_all() {
+	let mut btree: BTreeMap<usize, usize> = BTreeMap::new();
+
+	for (key, value) in &ITEMS {
+		btree.insert(*key, *value);
+	}
+
+	let mut drained = btree.drain_filter(|_, _| true).collect::<Vec<_>>();
+	assert!(btree.is_empty());
+
+	while let Some((key, value)) = btree.pop_first() {
+		drained.push((key, value));
+	}
+
+	assert_eq!(drained.len(), ITEMS.len());
+
+	for (key, value) in &ITEMS {
+		assert!(drained.contains(&(*key, *value)));
+	}
+}
+
 const ITEMS: [(usize, usize); 100] = [
 	(4223, 5948),
 	(8175, 4629),
