@@ -313,3 +313,15 @@ const ITEMS: [(usize, usize); 100] = [
 	(1553, 5964),
 	(4493, 3677),
 ];
+
+#[test]
+fn test_retain() {
+	let mut map = BTreeMap::from_iter((0..100).map(|x| (x, x * 10)));
+	assert_eq!(map.len(), 100);
+
+	map.retain(|&k, _| k % 2 == 0);
+	assert_eq!(map.len(), 50);
+	assert_eq!(map[&2], 20);
+	assert_eq!(map[&4], 40);
+	assert_eq!(map[&6], 60);
+}

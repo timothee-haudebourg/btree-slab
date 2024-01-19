@@ -2030,9 +2030,16 @@ where
 					let (key, value) = item.as_pair_mut();
 					self.len -= 1;
 					if (*pred)(key, value) {
-						let (item, next_addr) = self.btree.remove_at(self.addr).unwrap();
-						self.addr = next_addr;
-						return Some(item);
+						match self.btree.remove_at(self.addr) {
+							Some((item, next_addr)) => {
+								match self.btree.normalize(next_addr) {
+									Some(addr) => self.addr = addr,
+									None => self.addr = Address::nowhere(),
+								}
+								return Some(item);
+							}
+							None => return None,
+						}
 					} else {
 						self.addr = self.btree.next_item_or_back_address(self.addr).unwrap();
 					}
