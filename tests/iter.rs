@@ -188,3 +188,16 @@ pub fn into_iter_both_ends2() {
 
 	assert_eq!(counter.get(), 100);
 }
+
+#[test]
+pub fn range_next_back() {
+	let mut map = BTreeMap::new();
+	for i in 0..100 {
+		map.insert(i, i);
+	}
+
+	let mut it = map.range(..);
+	while let Some((key, value)) = it.next_back() {
+		assert_eq!(key, value);
+	}
+}
