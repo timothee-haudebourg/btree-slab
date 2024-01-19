@@ -2420,7 +2420,7 @@ where
 	#[inline]
 	fn next_back(&mut self) -> Option<(&'a K, &'a V)> {
 		if self.addr != self.end {
-			let addr = self.btree.previous_item_address(self.addr).unwrap();
+			let addr = self.btree.previous_item_address(self.end).unwrap();
 			let item = self.btree.item(addr).unwrap();
 			self.end = addr;
 			Some((item.key(), item.value()))
