@@ -188,3 +188,14 @@ pub fn into_iter_both_ends2() {
 
 	assert_eq!(counter.get(), 100);
 }
+
+#[test]
+pub fn range_mut_single_next_back() {
+	let mut map: BTreeMap<u64, u64> = BTreeMap::new();
+	map.insert(0, 5);
+	let prev = map.range_mut(..5).next_back();
+	if let Some((prev_off, prev_len)) = prev {
+		assert_eq!(prev_off, &0);
+		assert_eq!(prev_len, &5);
+	}
+}

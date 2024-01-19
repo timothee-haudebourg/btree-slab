@@ -2497,10 +2497,19 @@ where
 	#[inline]
 	fn next_back_item(&mut self) -> Option<&'a mut Item<K, V>> {
 		if self.addr != self.end {
-			let addr = self.btree.previous_item_address(self.addr).unwrap();
-			let item = self.btree.item_mut(addr).unwrap();
-			self.end = addr;
-			Some(unsafe { std::mem::transmute(item) }) // this is safe because only one mutable reference to the same item can be emitted.s
+			match self.btree.previous_item_address(self.addr) {
+				Some(addr) => {
+					let item = self.btree.item_mut(addr).unwrap();
+					self.end = addr;
+					Some(unsafe { std::mem::transmute(item) }) // this is safe because only one mutable reference to the same item can be emitted.s
+				}
+				None => {
+					// Tree had 1 item
+					let item = self.btree.item_mut(self.addr).unwrap();
+					self.end = self.addr;
+					Some(unsafe { std::mem::transmute(item) }) // this is safe because only one mutable reference to the same item can be emitted.s
+				}
+			}
 		} else {
 			None
 		}
